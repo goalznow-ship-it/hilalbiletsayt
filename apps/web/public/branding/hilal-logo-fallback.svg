@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="burgundy" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#480830"/>
+      <stop offset="100%" stop-color="#702047"/>
+    </linearGradient>
+  </defs>
+  <circle cx="100" cy="100" r="90" fill="url(#burgundy)" stroke="#25141F" stroke-width="2"/>
+  <text x="100" y="110" font-family="Arial" font-size="24" fill="#F8F4F6" text-anchor="middle" font-weight="bold">HILAL</text>
+  <text x="100" y="140" font-family="Arial" font-size="12" fill="#F8F4F6" text-anchor="middle">KURSLARI</text>
+</svg>

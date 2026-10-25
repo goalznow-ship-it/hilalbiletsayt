@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userBranchRoles UserBranchRole[]
+
+  @@map("roles")
+}
+
+model Branch {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  code      String   @unique
+  address   String?
+  phone     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userBranchRoles UserBranchRole[]
+
+  registrations ExaminationRegistration[]
+  candidates    Candidate[]
+
+  @@index([isActive])
+  @@map("branches")
+}
+
+model User {
+  id             String   @id @default(uuid()) @db.Uuid
+  email          String   @unique
+  fullName       String
+  passwordHash   String
+  isActive       Boolean  @default(true)
+  tokenVersion   Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  userBranchRoles UserBranchRole[]
+
+  @@index([isActive])
+  @@map("users")
+}
+
+model UserBranchRole {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  branchId  String   @db.Uuid
+  roleId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, branchId, roleId])
+  @@index([userId])
+  @@index([branchId])
+  @@index([roleId])
+  @@map("user_branch_roles")
+}
+
+model Exam {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique
+  title       String
+  description String?
+  status      String   @default("DRAFT")
+  createdBy   String   @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  sessions      ExamSession[]
+  registrations ExaminationRegistration[]
+
+  @@map("exams")
+}
+
+model ExamSession {
+  id          String   @id @default(uuid()) @db.Uuid
+  examId      String   @db.Uuid
+  sessionCode String
+  startsAt    DateTime
+  endsAt      DateTime
+  venue       String?
+  capacity    Int      @default(100)
+  status      String   @default("PLANNED")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  exam          Exam                    @relation(fields: [examId], references: [id], onDelete: Cascade)
+  registrations ExaminationRegistration[]
+
+  @@index([examId])
+  @@map("exam_sessions")
+}
+
+model Candidate {
+  id               String   @id @default(uuid()) @db.Uuid
+  candidate_number String   @unique
+  full_name        String
+  /// Case-insensitive uniqueness is enforced by the candidates_email_lower_key migration index.
+  email            String?
+  phone            String?
+  is_active        Boolean  @default(true)
+  branch_id        String?  @db.Uuid
+  created_at       DateTime @default(now())
+  updated_at       DateTime @default(now()) @updatedAt
+
+  branch        Branch?                 @relation(fields: [branch_id], references: [id], onDelete: SetNull)
+  registrations ExaminationRegistration[]
+
+  @@index([branch_id])
+  @@map("candidates")
+}
+
+model ExaminationRegistration {
+  id            String   @id @default(uuid()) @db.Uuid
+  candidate_id  String   @db.Uuid
+  exam_id       String   @db.Uuid
+  session_id    String   @db.Uuid
+  branch_id     String?  @db.Uuid
+  status        String   @default("PENDING")
+  registered_at DateTime @default(now())
+
+  candidate Candidate   @relation(fields: [candidate_id], references: [id], onDelete: Restrict)
+  exam      Exam        @relation(fields: [exam_id], references: [id], onDelete: Restrict)
+  session   ExamSession @relation(fields: [session_id], references: [id], onDelete: Restrict)
+  branch    Branch?     @relation(fields: [branch_id], references: [id], onDelete: SetNull)
+
+  @@unique([candidate_id, session_id], map: "examination_registrations_candidate_session_key")
+  @@index([candidate_id])
+  @@index([exam_id])
+  @@index([session_id])
+  @@index([branch_id])
+  @@map("examination_registrations")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  timestamp  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
