@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { Search, MapPin, Calendar, LoaderCircle } from "lucide-react";
+import CandidatePurchaseDialog from "@/components/examinations/CandidatePurchaseDialog";
 
 type Exam = {
   id: string;
@@ -37,6 +38,15 @@ type ExamSession = {
   status: "PLANNED" | "OPEN" | "CLOSED";
 };
 
+type ExamSummary = {
+  id: string;
+  code: string;
+  title: string;
+  price: number;
+  date: string;
+  startTime: string;
+};
+
 type FilterOptions = {
   branchId?: string;
   status?: string;
@@ -50,6 +60,9 @@ export default function Page() {
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<FilterOptions>({});
   const [searchQuery, setSearchQuery] = useState("");
+  const [showPurchase, setShowPurchase] = useState(false);
+  const [selectedExam, setSelectedExam] = useState<ExamSummary | null>(null);
+  const [selectedSession, setSelectedSession] = useState<ExamSession | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -270,8 +283,28 @@ export default function Page() {
                     <Button
                       size="sm"
                       variant="default"
-                      onClick={() => {}}
-                      disabled={exam.registered >= exam.capacity}
+                      onClick={() => {
+                        setSelectedExam({
+                          id: exam.id,
+                          code: exam.code,
+                          title: exam.title,
+                          price: exam.price,
+                          date: exam.date,
+                          startTime: exam.startTime,
+                        });
+                        setSelectedSession({
+                          id: exam.sessions?.[0]?.id || "",
+                          sessionCode: exam.sessions?.[0]?.sessionCode || "",
+                          startsAt: exam.sessions?.[0]?.startsAt || "",
+                          endsAt: exam.sessions?.[0]?.endsAt || "",
+                          venue: exam.sessions?.[0]?.venue,
+                          capacity: exam.sessions?.[0]?.capacity || 0,
+                          registered: exam.sessions?.[0]?.registered || 0,
+                          status: exam.sessions?.[0]?.status || "PLANNED",
+                        });
+                        setShowPurchase(true);
+                      }}
+                      disabled={exam.registered >= exam.capacity || !exam.sessions?.length}
                     >
                       {exam.registered >= exam.capacity ? "Məcburi" : "Bilet al"}
                     </Button>
@@ -282,6 +315,14 @@ export default function Page() {
           ))}
         </div>
       </div>
+    {showPurchase && selectedExam && selectedSession && (
+      <CandidatePurchaseDialog
+        exam={selectedExam}
+        session={selectedSession}
+        onClose={() => setShowPurchase(false)}
+        onPurchase={async () => {}}
+      />
+    )}
     </div>
   );
 }
