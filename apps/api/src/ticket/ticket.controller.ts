@@ -53,6 +53,26 @@ export class TicketController {
     return this.ticketService.findByCode(code);
   }
 
+  @Get("verify/:token")
+  @ApiOperation({ summary: "Verify a ticket by its QR token (public)" })
+  @ApiResponse({ status: 200, description: "Ticket verification result" })
+  @ApiResponse({ status: 404, description: "Ticket not found" })
+  async verify(@Param("token") token: string) {
+    return this.ticketService.verifyByToken(token);
+  }
+
+  @Get(":id")
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: "Get ticket details" })
+  @ApiResponse({ status: 200, description: "Ticket details" })
+  @ApiBearerAuth()
+  async details(
+    @Param("id") ticketId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.ticketService.findOne(ticketId, user);
+  }
+
   @Put(":id/use")
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Mark ticket as used (scanned)" })

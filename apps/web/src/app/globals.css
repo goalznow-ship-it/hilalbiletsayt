@@ -2006,3 +2006,40 @@ input[type="checkbox"] {
     flex-wrap: wrap;
   }
 }
+
+/* Printable examination ticket */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  .desktop-sidebar,
+  .app-header,
+  .workspace-footer,
+  .skip-link,
+  .print-hidden {
+    display: none !important;
+  }
+
+  .workspace,
+  .page-content {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .print-ticket {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: 1px solid #d4d4d8 !important;
+    break-inside: avoid;
+  }
+}

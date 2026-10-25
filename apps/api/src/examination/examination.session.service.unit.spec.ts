@@ -57,6 +57,7 @@ describe("ExaminationSessionService (unit, mocked Prisma)", () => {
     const prisma = {
       examSession: { findMany, findUnique, create, update },
       exam: { findUnique: examFindUnique },
+      ticket: { count: vi.fn().mockResolvedValue(0) },
       $transaction: vi.fn(
         async (callback: (transaction: typeof tx) => Promise<unknown>) =>
           callback(tx),

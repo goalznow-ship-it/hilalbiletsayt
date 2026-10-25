@@ -43,6 +43,7 @@ beforeAll(async () => {
   await prisma.$connect();
 
   await prisma.auditLog.deleteMany();
+  await prisma.ticket.deleteMany();
   await prisma.examinationRegistration.deleteMany();
   await prisma.examSession.deleteMany();
   await prisma.exam.deleteMany();

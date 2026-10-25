@@ -10,6 +10,7 @@ type ExamCreateData = {
   code: string;
   title: string;
   description?: string;
+  price?: number;
   createdBy: string;
 };
 
@@ -17,6 +18,7 @@ type ExamUpdateData = {
   code?: string;
   title?: string;
   description?: string;
+  price?: number;
   status?: string;
 };
 
@@ -58,6 +60,7 @@ export class ExaminationService {
       code: exam.code,
       title: exam.title,
       description: exam.description,
+      price: exam.price,
       status: exam.status,
       createdAt: exam.createdAt,
       sessionCount: exam.sessions.length,
@@ -78,15 +81,8 @@ export class ExaminationService {
       throw new NotFoundException("Sənəd tapılmadı");
     }
 
-    return {
-      id: exam.id,
-      code: exam.code,
-      title: exam.title,
-      description: exam.description,
-      status: exam.status,
-      createdAt: exam.createdAt,
-      updatedAt: exam.updatedAt,
-      sessions: exam.sessions.map((s: any) => ({
+    const sessions = await Promise.all(
+      exam.sessions.map(async (s: any) => ({
         id: s.id,
         examId: s.examId,
         sessionCode: s.sessionCode,
@@ -94,12 +90,36 @@ export class ExaminationService {
         endsAt: s.endsAt,
         venue: s.venue,
         capacity: s.capacity,
+        registered: await this.prisma.ticket.count({
+          where: { sessionId: s.id, status: "ACTIVE" },
+        }),
         status: s.status,
       })),
+    );
+
+    return {
+      id: exam.id,
+      code: exam.code,
+      title: exam.title,
+      description: exam.description,
+      price: exam.price,
+      status: exam.status,
+      createdAt: exam.createdAt,
+      updatedAt: exam.updatedAt,
+      sessions,
     };
   }
 
   async create(data: ExamCreateData) {
+    if (
+      data.price !== undefined &&
+      (!Number.isInteger(data.price) || data.price < 0)
+    ) {
+      throw new BadRequestException(
+        "Qiymət mənfi olmayan tam ədəd olmalıdır",
+      );
+    }
+
     const exam = await this.prisma.exam.findFirst({
       where: { code: data.code },
     });
@@ -113,6 +133,7 @@ export class ExaminationService {
         code: data.code,
         title: data.title,
         description: data.description,
+        price: data.price ?? 0,
         createdBy: data.createdBy,
         status: "DRAFT",
       },
@@ -123,12 +144,22 @@ export class ExaminationService {
       code: newExam.code,
       title: newExam.title,
       description: newExam.description,
+      price: newExam.price,
       status: newExam.status,
       createdAt: newExam.createdAt,
     };
   }
 
   async update(id: string, data: ExamUpdateData) {
+    if (
+      data.price !== undefined &&
+      (!Number.isInteger(data.price) || data.price < 0)
+    ) {
+      throw new BadRequestException(
+        "Qiymət mənfi olmayan tam ədəd olmalıdır",
+      );
+    }
+
     const exam = await this.prisma.exam.findUnique({
       where: { id },
     });
@@ -154,6 +185,7 @@ export class ExaminationService {
         code: data.code !== undefined ? data.code : exam.code,
         title: data.title !== undefined ? data.title : exam.title,
         description: data.description !== undefined ? data.description : exam.description,
+        price: data.price !== undefined ? data.price : exam.price,
         status: data.status !== undefined ? data.status : exam.status,
       },
     });
@@ -163,6 +195,7 @@ export class ExaminationService {
       code: updatedExam.code,
       title: updatedExam.title,
       description: updatedExam.description,
+      price: updatedExam.price,
       status: updatedExam.status,
       createdAt: updatedExam.createdAt,
       updatedAt: updatedExam.updatedAt,

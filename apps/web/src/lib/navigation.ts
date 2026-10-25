@@ -15,6 +15,7 @@ export const navigation = [
   { href: "/dashboard/branches", label: "Filiallar", icon: Building2 },
   { href: "/dashboard/users", label: "İşçilər və satıcılar", icon: UsersRound },
   { href: "/dashboard/exams", label: "İmtahanlar", icon: GraduationCap },
+  { href: "/examinations", label: "Bilet kassası", icon: Ticket },
   { href: "/dashboard/tickets", label: "Bilet satışı", icon: Ticket },
   { href: "/dashboard/omr", label: "OMR skan", icon: ScanLine },
   { href: "/dashboard/results", label: "Nəticələr", icon: ListChecks },

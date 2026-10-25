@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -9,7 +10,7 @@ import { AuditService } from "../audit/audit.service";
 import { CreateTicketDto } from "./create-ticket.dto";
 import { TicketQueryDto } from "./ticket-query.dto";
 import { resolvePagination, toPaginated } from "../common/pagination";
-import { AuthenticatedUser, isCentralAdmin, assertBranchAllowed } from "../auth/authorization";
+import { AuthenticatedUser, isCentralAdmin, assertBranchAllowed, candidateVisibilityWhere } from "../auth/authorization";
 import * as crypto from "crypto";
 
 type TicketView = {
@@ -27,6 +28,9 @@ type TicketView = {
   registeredAt: Date;
   usedAt: Date | null;
   usedBy: string | null;
+  paymentStatus: string;
+  paymentMethod: string | null;
+  paymentDate: Date | null;
   examCode: string;
   examTitle: string;
   sessionCode: string | null;
@@ -54,6 +58,9 @@ function mapTicketView(
     registeredAt: Date;
     usedAt: Date | null;
     usedBy: string | null;
+    paymentStatus: string;
+    paymentMethod: string | null;
+    paymentDate: Date | null;
     exam: { id: string; code: string; title: string };
     session?: { id: string; sessionCode: string } | null;
     candidate?: { id: string; candidate_number: string; full_name: string } | null;
@@ -76,6 +83,9 @@ function mapTicketView(
     registeredAt: ticket.registeredAt,
     usedAt: ticket.usedAt,
     usedBy: ticket.usedBy,
+    paymentStatus: ticket.paymentStatus,
+    paymentMethod: ticket.paymentMethod,
+    paymentDate: ticket.paymentDate,
     examCode: ticket.exam.code,
     examTitle: ticket.exam.title,
     sessionCode: ticket.session?.sessionCode ?? null,
@@ -222,16 +232,24 @@ export class TicketService {
     data: CreateTicketDto,
     user: AuthenticatedUser,
   ) {
-    // Verify exam exists
+    // The server, not the client, decides the sale price.
     const exam = await this.prisma.exam.findUnique({
       where: { id: data.examId },
-      select: { id: true, code: true, title: true },
+      select: { id: true, code: true, title: true, price: true, status: true },
     });
     if (!exam) {
       throw new NotFoundException("İmtahan tapılmadı");
     }
+    if (exam.status !== "PUBLISHED") {
+      throw new BadRequestException("İmtahan satış üçün aktiv deyil");
+    }
+    if (data.price !== undefined && data.price !== exam.price) {
+      throw new BadRequestException(
+        "Bilet qiyməti imtahanın müəyyən edilmiş qiyməti ilə uyuşmur",
+      );
+    }
 
-    // Verify session if provided
+    // Verify session if provided.
     if (data.sessionId) {
       const session = await this.prisma.examSession.findUnique({
         where: { id: data.sessionId },
@@ -243,68 +261,132 @@ export class TicketService {
       if (session.examId !== data.examId) {
         throw new BadRequestException("Sessiya seçilmiş imtahanla uyuşmur");
       }
-      // Check capacity if session is OPEN
-      if (session.status === "OPEN") {
-        const activeCount = await this.prisma.examinationRegistration.count({
-          where: { session_id: data.sessionId, status: "ACTIVE" },
+      if (session.status !== "OPEN") {
+        throw new BadRequestException("Sessiya satış üçün açıq deyil");
+      }
+    }
+
+    // Verify candidate if provided.
+    let candidateBranchId: string | null = null;
+    if (data.candidateId) {
+      const candidate = await this.prisma.candidate.findFirst({
+        where: {
+          id: data.candidateId,
+          ...candidateVisibilityWhere(user),
+        },
+        select: { id: true, branch_id: true, is_active: true },
+      });
+      if (!candidate) {
+        throw new NotFoundException("Namizəd tapılmadı");
+      }
+      if (!candidate.is_active) {
+        throw new BadRequestException("Namizəd aktiv deyil");
+      }
+      candidateBranchId = candidate.branch_id;
+    }
+
+    // Determine and authorize the branch.
+    const branchId = candidateBranchId ?? data.branchId ?? null;
+    if (branchId) {
+      if (!isCentralAdmin(user)) {
+        assertBranchAllowed(user, branchId);
+      }
+      const branch = await this.prisma.branch.findUnique({
+        where: { id: branchId },
+        select: { id: true },
+      });
+      if (!branch) {
+        throw new BadRequestException("Filial tapılmadı");
+      }
+    }
+
+    let paymentDate: Date | null = null;
+    if (data.paymentDate) {
+      paymentDate = new Date(data.paymentDate);
+      if (Number.isNaN(paymentDate.getTime())) {
+        throw new BadRequestException("Ödəniş tarixi düzgün deyil");
+      }
+    }
+
+    // Generate an unguessable verification token; the QR payload carries a
+    // public verification URL, never candidate data.
+    const code = `HK-${data.examId.slice(0, 8)}-${Date.now().toString(36).toUpperCase()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)
+      .toUpperCase()}`;
+    const qrCode = crypto.randomBytes(32).toString("base64url");
+
+    const sellerId = user.userId;
+
+    const ticket = await this.prisma.$transaction(async (tx) => {
+      if (data.sessionId) {
+        // Serialize capacity checks for this session.
+        await tx.$queryRawUnsafe(
+          'SELECT "id" FROM "exam_sessions" WHERE "id" = $1::uuid FOR UPDATE',
+          data.sessionId,
+        );
+
+        const session = await tx.examSession.findUnique({
+          where: { id: data.sessionId },
+          select: { status: true, capacity: true, examId: true },
+        });
+        if (!session) {
+          throw new NotFoundException("Sessiya tapılmadı");
+        }
+        if (session.status !== "OPEN") {
+          throw new BadRequestException("Sessiya satış üçün açıq deyil");
+        }
+        if (session.examId !== data.examId) {
+          throw new BadRequestException("Sessiya seçilmiş imtahanla uyuşmur");
+        }
+
+        const activeCount = await tx.ticket.count({
+          where: { sessionId: data.sessionId, status: "ACTIVE" },
         });
         if (activeCount >= session.capacity) {
           throw new BadRequestException("Sessiya kapasitəsi doldurulub");
         }
       }
-    }
 
-    // Verify candidate if provided
-    if (data.candidateId) {
-      const candidate = await this.prisma.candidate.findUnique({
-        where: { id: data.candidateId },
-      });
-      if (!candidate) {
-        throw new NotFoundException("Namizəd tapılmadı");
+      if (data.candidateId) {
+        // Serialize duplicate purchase checks for this candidate.
+        await tx.$queryRawUnsafe(
+          'SELECT "id" FROM "candidates" WHERE "id" = $1::uuid FOR UPDATE',
+          data.candidateId,
+        );
+
+        if (data.sessionId) {
+          const existing = await tx.ticket.findFirst({
+            where: {
+              candidateId: data.candidateId,
+              sessionId: data.sessionId,
+              status: "ACTIVE",
+            },
+            select: { id: true },
+          });
+          if (existing) {
+            throw new ConflictException(
+              "Bu namizəd üçün bu sessiyada bilet artıq yaradılıb",
+            );
+          }
+        }
       }
-    }
 
-    // Generate ticket code and QR code
-    const code = `HK-${data.examId.slice(0, 8)}-${Date.now().toString(36).toUpperCase()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)
-      .toUpperCase()}`;
-    const qrData = `${code}-${data.examId}`;
-    const qrCode = crypto.createHash("sha256").update(qrData).digest("hex");
-
-    // Determine seller (automatic - current user)
-    const sellerId = user.userId;
-
-    const candidateBranchId = data.candidateId
-      ? (await this.prisma.candidate.findUnique({
-          where: { id: data.candidateId },
-          select: { branch_id: true },
-        }))?.branch_id
-      : null;
-
-// Branch authorization for non-central users
-if (candidateBranchId && !isCentralAdmin(user)) {
-  assertBranchAllowed(user, candidateBranchId);
-}
-const branchId = data.branchId ?? candidateBranchId;
-
-    // Create the ticket
-    const ticket = await this.prisma.$transaction(async (tx) => {
       const created = await tx.ticket.create({
         data: {
           code,
           examId: data.examId,
           sessionId: data.sessionId || null,
           candidateId: data.candidateId || null,
-          branchId: branchId || null,
+          branchId,
           sellerId,
-          price: data.price,
-          type: data.type || "STANDARD",
+          price: exam.price,
+          type: data.type?.trim() || "STANDARD",
           qrCode,
           status: "ACTIVE",
           paymentStatus: "PENDING",
-          paymentMethod: data.paymentMethod,
-          paymentDate: data.paymentDate ? new Date(data.paymentDate) : null,
+          paymentMethod: data.paymentMethod ?? null,
+          paymentDate,
         },
         include: {
           exam: { select: { id: true, code: true, title: true } },
@@ -337,7 +419,55 @@ const branchId = data.branchId ?? candidateBranchId;
 
     return {
       ...mapTicketView(ticket),
-      qrCodeImage: `/api/tickets/${ticket.id}/qr`,
+      qrToken: ticket.qrCode,
+      qrPayload: `/tickets/verify/${ticket.qrCode}`,
+    };
+  }
+
+  /**
+   * Public ticket verification by opaque QR token.
+   * Returns only the minimum data needed to admit a ticket holder.
+   */
+  async verifyByToken(token: string) {
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { qrCode: token },
+      include: {
+        exam: { select: { code: true, title: true } },
+        session: {
+          select: { sessionCode: true, startsAt: true, venue: true },
+        },
+        candidate: { select: { full_name: true } },
+      },
+    });
+
+    if (!ticket) {
+      throw new NotFoundException("Bilet tapılmadı");
+    }
+
+    const name = ticket.candidate?.full_name ?? null;
+    const maskedName = name
+      ? name
+          .split(/\s+/)
+          .filter(Boolean)
+          .map(
+            (part) =>
+              part[0].toUpperCase() + "*".repeat(Math.max(part.length - 1, 1)),
+          )
+          .join(" ")
+      : null;
+
+    return {
+      valid: ticket.status === "ACTIVE",
+      code: ticket.code,
+      examCode: ticket.exam.code,
+      examTitle: ticket.exam.title,
+      sessionCode: ticket.session?.sessionCode ?? null,
+      startsAt: ticket.session?.startsAt ?? null,
+      venue: ticket.session?.venue ?? null,
+      status: ticket.status,
+      usedAt: ticket.usedAt,
+      candidateNameMasked: maskedName,
+      paymentStatus: ticket.paymentStatus,
     };
   }
 

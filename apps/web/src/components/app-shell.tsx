@@ -21,7 +21,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const { user, selectedBranch, selectBranch } = useSession();
-  if (pathname === "/login" || pathname.startsWith("/auth/"))
+  if (
+    pathname === "/login" ||
+    pathname.startsWith("/auth/") ||
+    pathname.startsWith("/tickets/verify/")
+  )
     return <>{children}</>;
   const current =
     navigation.find((item) => pathname === item.href) ?? navigation[0];

@@ -25,14 +25,19 @@ export class CreateTicketDto {
   @IsOptional()
   branchId?: string;
 
+  /**
+   * Kept for backwards compatibility. The server always uses the exam's
+   * configured price; a mismatching value is rejected.
+   */
   @IsInt()
-  price!: number;
+  @IsOptional()
+  price?: number;
 
   @IsString()
-  @IsNotEmpty()
-  type!: string;
+  @IsOptional()
+  type?: string;
 
-  @IsString()
+  @IsIn(["CASH", "CARD", "BANK_TRANSFER"])
   @IsOptional()
   paymentMethod?: string;
 

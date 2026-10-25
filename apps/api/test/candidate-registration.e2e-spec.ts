@@ -82,6 +82,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  await prisma.ticket.deleteMany();
   await prisma.examinationRegistration.deleteMany();
   await prisma.examSession.deleteMany();
   await prisma.exam.deleteMany();

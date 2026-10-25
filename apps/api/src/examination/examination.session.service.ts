@@ -37,7 +37,7 @@ type SessionRecord = {
   status: string;
 };
 
-function mapSession(session: SessionRecord) {
+function mapSession(session: SessionRecord, registered = 0) {
   return {
     id: session.id,
     examId: session.examId,
@@ -46,6 +46,7 @@ function mapSession(session: SessionRecord) {
     endsAt: session.endsAt,
     venue: session.venue,
     capacity: session.capacity,
+    registered,
     status: session.status,
   };
 }
@@ -81,7 +82,16 @@ export class ExaminationSessionService {
       orderBy: { startsAt: "asc" },
     });
 
-    return sessions.map(mapSession);
+    return Promise.all(
+      sessions.map(async (session) =>
+        mapSession(
+          session,
+          await this.prisma.ticket.count({
+            where: { sessionId: session.id, status: "ACTIVE" },
+          }),
+        ),
+      ),
+    );
   }
 
   async findOne(id: string) {
@@ -93,7 +103,12 @@ export class ExaminationSessionService {
       throw new NotFoundException("Sessiya tapılmadı");
     }
 
-    return mapSession(session);
+    return mapSession(
+      session,
+      await this.prisma.ticket.count({
+        where: { sessionId: session.id, status: "ACTIVE" },
+      }),
+    );
   }
 
   async create(data: CreateExamSessionDto, user?: AuthenticatedUser) {

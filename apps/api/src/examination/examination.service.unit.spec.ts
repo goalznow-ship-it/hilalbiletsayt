@@ -14,6 +14,9 @@ describe("ExaminationService (unit, mocked Prisma)", () => {
         create: vi.fn(),
         update: vi.fn(),
       },
+      ticket: {
+        count: vi.fn().mockResolvedValue(0),
+      },
     };
     service = new ExaminationService(prisma);
   });
