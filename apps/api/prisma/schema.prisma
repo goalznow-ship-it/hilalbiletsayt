@@ -31,6 +31,8 @@ model Branch {
   userBranchRoles UserBranchRole[]
 
   registrations ExaminationRegistration[]
+  tickets       Ticket[]
+
   candidates    Candidate[]
 
   @@index([isActive])
@@ -48,6 +50,8 @@ model User {
   updatedAt      DateTime @updatedAt
 
   userBranchRoles UserBranchRole[]
+
+  tickets       Ticket[]
 
   @@index([isActive])
   @@map("users")
@@ -83,6 +87,7 @@ model Exam {
 
   sessions      ExamSession[]
   registrations ExaminationRegistration[]
+  tickets       Ticket[]
 
   @@map("exams")
 }
@@ -101,6 +106,7 @@ model ExamSession {
 
   exam          Exam                    @relation(fields: [examId], references: [id], onDelete: Cascade)
   registrations ExaminationRegistration[]
+  tickets       Ticket[]
 
   @@index([examId])
   @@map("exam_sessions")
@@ -120,6 +126,7 @@ model Candidate {
 
   branch        Branch?                 @relation(fields: [branch_id], references: [id], onDelete: SetNull)
   registrations ExaminationRegistration[]
+  tickets       Ticket[]
 
   @@index([branch_id])
   @@map("candidates")
@@ -160,4 +167,35 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([timestamp])
   @@map("audit_logs")
+}
+
+model Ticket {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique
+  examId      String   @db.Uuid
+  sessionId   String?  @db.Uuid
+  candidateId String?  @db.Uuid
+  branchId    String?  @db.Uuid
+  sellerId    String?  @db.Uuid
+  price       Int
+  status      String   @default("ACTIVE")
+  type        String   @default("STANDARD")
+  qrCode      String
+  registeredAt DateTime @default(now())
+  usedAt      DateTime?
+  usedBy      String?
+
+  exam        Exam       @relation(fields: [examId], references: [id])
+  session     ExamSession? @relation(fields: [sessionId], references: [id])
+  candidate   Candidate? @relation(fields: [candidateId], references: [id])
+  branch      Branch?    @relation(fields: [branchId], references: [id])
+  seller      User?      @relation(fields: [sellerId], references: [id])
+
+  @@index([examId])
+  @@index([sessionId])
+  @@index([candidateId])
+  @@index([branchId])
+  @@index([sellerId])
+  @@index([status])
+  @@map("tickets")
 }
