@@ -35,6 +35,10 @@ export class CreateTicketDto {
   @IsString()
   @IsOptional()
   paymentMethod?: string;
+
+  @IsString()
+  @IsOptional()
+  paymentDate?: string;
 }
 
 export class UpdateTicketDto {

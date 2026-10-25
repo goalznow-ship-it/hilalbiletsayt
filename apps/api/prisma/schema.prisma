@@ -184,6 +184,10 @@ model Ticket {
   registeredAt DateTime @default(now())
   usedAt      DateTime?
   usedBy      String?
+  paymentStatus String   @default("PENDING") // PENDING, PAID, REFUNDED
+  paymentMethod String?  
+  paymentDate  DateTime?
+  notes        String?
 
   exam        Exam       @relation(fields: [examId], references: [id])
   session     ExamSession? @relation(fields: [sessionId], references: [id])
@@ -197,5 +201,6 @@ model Ticket {
   @@index([branchId])
   @@index([sellerId])
   @@index([status])
+  @@index([paymentStatus])
   @@map("tickets")
 }

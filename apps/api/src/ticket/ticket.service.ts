@@ -302,6 +302,9 @@ const branchId = data.branchId ?? candidateBranchId;
           type: data.type || "STANDARD",
           qrCode,
           status: "ACTIVE",
+          paymentStatus: "PENDING",
+          paymentMethod: data.paymentMethod,
+          paymentDate: data.paymentDate ? new Date(data.paymentDate) : null,
         },
         include: {
           exam: { select: { id: true, code: true, title: true } },
