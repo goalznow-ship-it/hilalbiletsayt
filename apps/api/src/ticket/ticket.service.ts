@@ -9,7 +9,7 @@ import { AuditService } from "../audit/audit.service";
 import { CreateTicketDto } from "./create-ticket.dto";
 import { TicketQueryDto } from "./ticket-query.dto";
 import { resolvePagination, toPaginated } from "../common/pagination";
-import { AuthenticatedUser, isCentralAdmin } from "../auth/authorization";
+import { AuthenticatedUser, isCentralAdmin, assertBranchAllowed } from "../auth/authorization";
 import * as crypto from "crypto";
 
 type TicketView = {
@@ -281,7 +281,12 @@ export class TicketService {
           select: { branch_id: true },
         }))?.branch_id
       : null;
-    const branchId = data.branchId ?? candidateBranchId;
+
+// Branch authorization for non-central users
+if (candidateBranchId && !isCentralAdmin(user)) {
+  assertBranchAllowed(user, candidateBranchId);
+}
+const branchId = data.branchId ?? candidateBranchId;
 
     // Create the ticket
     const ticket = await this.prisma.$transaction(async (tx) => {
