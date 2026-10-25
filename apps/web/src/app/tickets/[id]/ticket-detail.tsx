@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import QRCode from "react-qr-code";
 import { useSession } from "@/components/session-provider";
+import { formatAzn } from "@/lib/money";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -61,7 +62,7 @@ function formatDateTime(value?: string | null) {
 }
 
 export default function TicketDetail({ ticketId }: { ticketId: string }) {
-  const { user, request } = useSession();
+  const { user, initializing, request } = useSession();
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -95,6 +96,14 @@ export default function TicketDetail({ ticketId }: { ticketId: string }) {
       active = false;
     };
   }, [ticketId, user, request]);
+
+  if (initializing) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Skeleton className="h-8 w-8 animate-pulse rounded-full" />
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -238,7 +247,7 @@ export default function TicketDetail({ ticketId }: { ticketId: string }) {
               <div className="grid gap-3 border-t border-border pt-4 text-sm sm:grid-cols-2">
                 <div>
                   <p className="text-xs text-muted-foreground">Qiymət</p>
-                  <p className="text-lg font-medium">{ticket.price} AZN</p>
+                  <p className="text-lg font-medium">{formatAzn(ticket.price)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">

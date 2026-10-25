@@ -43,7 +43,7 @@ export class ExaminationController {
   @ApiResponse({ status: 403, description: "Insufficient permissions" })
   @ApiResponse({ status: 400, description: "Duplicate examination code" })
   async create(
-    @Body() dto: { code: string; title: string; description?: string; price?: number; createdBy: string },
+    @Body() dto: { code: string; title: string; description?: string; price?: number | null; createdBy: string },
   ) {
     return this.examinationService.create(dto);
   }
@@ -55,7 +55,7 @@ export class ExaminationController {
   @ApiResponse({ status: 404, description: "Examination not found" })
   async update(
     @Param("id") id: string,
-    @Body() dto: { code?: string; title?: string; description?: string; price?: number; status?: string },
+    @Body() dto: { code?: string; title?: string; description?: string; price?: number | null; status?: string },
   ) {
     return this.examinationService.update(id, dto);
   }

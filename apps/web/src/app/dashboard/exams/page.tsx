@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { GraduationCap } from "lucide-react";
+import { formatAzn } from "@/lib/money";
 
 type Exam = {
   id: string;
@@ -157,7 +158,7 @@ export default function Page() {
                       <td className="font-mono">{exam.code}</td>
                       <td>{exam.title}</td>
                       <td>{exam.date}</td>
-                      <td className="text-right">{exam.price} AZN</td>
+                      <td className="text-right">{formatAzn(exam.price)}</td>
                       <td>{exam.status}</td>
                     </tr>
                   ))}

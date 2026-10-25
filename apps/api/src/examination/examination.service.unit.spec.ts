@@ -89,6 +89,65 @@ describe("ExaminationService (unit, mocked Prisma)", () => {
   });
 
   describe("create", () => {
+    it("rejects a negative exam price", async () => {
+      await expect(
+        service.create({
+          code: "EX-1",
+          title: "İmtahan",
+          price: -1,
+          createdBy: "user-1",
+        }),
+      ).rejects.toThrow("Qiymət qəpik ilə mənfi olmayan tam ədəd olmalıdır");
+    });
+
+    it("creates an exam without a configured price", async () => {
+      prisma.exam.findFirst.mockResolvedValue(null);
+      prisma.exam.create.mockResolvedValue({
+        id: "exam-1",
+        code: "EX-1",
+        title: "İmtahan",
+        description: null,
+        price: null,
+        status: "DRAFT",
+        createdAt: new Date(),
+      });
+
+      const result = await service.create({
+        code: "EX-1",
+        title: "İmtahan",
+        createdBy: "user-1",
+      });
+
+      expect(result.price).toBeNull();
+      expect(prisma.exam.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ price: null }),
+        }),
+      );
+    });
+
+    it("keeps an explicitly free exam at zero qepik", async () => {
+      prisma.exam.findFirst.mockResolvedValue(null);
+      prisma.exam.create.mockResolvedValue({
+        id: "exam-1",
+        code: "EX-1",
+        title: "İmtahan",
+        description: null,
+        price: 0,
+        status: "DRAFT",
+        createdAt: new Date(),
+      });
+
+      const result = await service.create({
+        code: "EX-1",
+        title: "İmtahan",
+        price: 0,
+        createdBy: "user-1",
+      });
+
+      expect(result.price).toBe(0);
+    });
+
     it("rejects a duplicate exam code", async () => {
       prisma.exam.findFirst.mockResolvedValue({ id: "existing" });
 

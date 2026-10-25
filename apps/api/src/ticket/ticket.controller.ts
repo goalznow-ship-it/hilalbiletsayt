@@ -47,10 +47,18 @@ export class TicketController {
   }
 
   @Get("code/:code")
-  @ApiOperation({ summary: "Find ticket by code" })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: "Find ticket by code (authenticated staff)" })
   @ApiResponse({ status: 200, description: "Ticket found" })
-  async findByCode(@Param("code") code: string) {
-    return this.ticketService.findByCode(code);
+  @ApiResponse({ status: 401, description: "Authentication required" })
+  @ApiResponse({ status: 403, description: "Ticket is outside the user's branch scope" })
+  @ApiResponse({ status: 404, description: "Ticket not found" })
+  @ApiBearerAuth()
+  async findByCode(
+    @Param("code") code: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.ticketService.findByCode(code, user);
   }
 
   @Get("verify/:token")

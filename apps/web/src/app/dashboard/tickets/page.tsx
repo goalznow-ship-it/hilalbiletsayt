@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { Ticket, Trash } from "lucide-react";
+import { formatAzn } from "@/lib/money";
 
 type Ticket = {
   id: string;
@@ -144,7 +145,7 @@ export default function Page() {
                       <td>{ticket.examCode} - {ticket.examTitle}</td>
                       <td>{ticket.sessionCode || "Sessiya yoxdur"}</td>
                       <td>{ticket.candidateFullName || "Nömrəsi yox"}</td>
-                      <td className="text-right">{ticket.price} AZN</td>
+                      <td className="text-right">{formatAzn(ticket.price)}</td>
                       <td>{ticket.status}</td>
                       <td>
                         <Button

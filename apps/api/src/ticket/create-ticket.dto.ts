@@ -6,6 +6,7 @@ import {
   IsString,
   IsOptional,
   IsIn,
+  Min,
 } from "class-validator";
 
 export class CreateTicketDto {
@@ -27,9 +28,10 @@ export class CreateTicketDto {
 
   /**
    * Kept for backwards compatibility. The server always uses the exam's
-   * configured price; a mismatching value is rejected.
+   * configured price in qəpik; a mismatching value is rejected.
    */
   @IsInt()
+  @Min(0)
   @IsOptional()
   price?: number;
 

@@ -80,8 +80,9 @@ model Exam {
   code        String   @unique
   title       String
   description String?
-  /// Ticket price in whole AZN, set by central admins.
-  price       Int      @default(0)
+  /// Ticket price in integer qəpik (1 AZN = 100 qəpik).
+  /// null = not configured; 0 = explicitly free.
+  price       Int?
   status      String   @default("DRAFT")
   createdBy   String   @db.Uuid
   createdAt   DateTime @default(now())
@@ -179,6 +180,7 @@ model Ticket {
   candidateId String?  @db.Uuid @map("candidate_id")
   branchId    String?  @db.Uuid @map("branch_id")
   sellerId    String?  @db.Uuid @map("seller_id")
+  /// Recorded sale price in integer qəpik (1 AZN = 100 qəpik).
   price       Int
   status      String   @default("ACTIVE")
   type        String   @default("STANDARD")

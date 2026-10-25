@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { isValidQepikPrice } from "../common/money";
 
 type ExamWhere = {
   status?: string;
@@ -10,7 +11,7 @@ type ExamCreateData = {
   code: string;
   title: string;
   description?: string;
-  price?: number;
+  price?: number | null;
   createdBy: string;
 };
 
@@ -18,7 +19,7 @@ type ExamUpdateData = {
   code?: string;
   title?: string;
   description?: string;
-  price?: number;
+  price?: number | null;
   status?: string;
 };
 
@@ -113,10 +114,11 @@ export class ExaminationService {
   async create(data: ExamCreateData) {
     if (
       data.price !== undefined &&
-      (!Number.isInteger(data.price) || data.price < 0)
+      data.price !== null &&
+      !isValidQepikPrice(data.price)
     ) {
       throw new BadRequestException(
-        "Qiymət mənfi olmayan tam ədəd olmalıdır",
+        "Qiymət qəpik ilə mənfi olmayan tam ədəd olmalıdır",
       );
     }
 
@@ -133,7 +135,7 @@ export class ExaminationService {
         code: data.code,
         title: data.title,
         description: data.description,
-        price: data.price ?? 0,
+        price: data.price ?? null,
         createdBy: data.createdBy,
         status: "DRAFT",
       },
@@ -153,10 +155,11 @@ export class ExaminationService {
   async update(id: string, data: ExamUpdateData) {
     if (
       data.price !== undefined &&
-      (!Number.isInteger(data.price) || data.price < 0)
+      data.price !== null &&
+      !isValidQepikPrice(data.price)
     ) {
       throw new BadRequestException(
-        "Qiymət mənfi olmayan tam ədəd olmalıdır",
+        "Qiymət qəpik ilə mənfi olmayan tam ədəd olmalıdır",
       );
     }
 

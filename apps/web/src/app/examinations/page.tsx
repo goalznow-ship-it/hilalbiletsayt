@@ -12,13 +12,14 @@ import { Search, LoaderCircle } from "lucide-react";
 import CandidatePurchaseDialog, {
   type ExamSummary,
 } from "@/components/examinations/CandidatePurchaseDialog";
+import { formatAzn, isValidQepikPrice } from "@/lib/money";
 
 type Exam = {
   id: string;
   code: string;
   title: string;
   description?: string | null;
-  price: number;
+  price: number | null;
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED" | string;
   createdAt?: string;
   sessionCount: number;
@@ -42,7 +43,7 @@ const STATUS_CLASSES: Record<string, string> = {
 };
 
 export default function Page() {
-  const { user, request } = useSession();
+  const { user, initializing, request } = useSession();
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -82,6 +83,14 @@ export default function Page() {
       active = false;
     };
   }, [user, request, filter, searchQuery]);
+
+  if (initializing) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Skeleton className="h-8 w-8 animate-pulse rounded-full" />
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -196,8 +205,14 @@ export default function Page() {
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {exams.map((exam) => {
+              const sellablePrice =
+                exam.price !== null && isValidQepikPrice(exam.price)
+                  ? exam.price
+                  : null;
               const sellable =
-                exam.status === "PUBLISHED" && exam.sessionCount > 0;
+                exam.status === "PUBLISHED" &&
+                exam.sessionCount > 0 &&
+                sellablePrice !== null;
               return (
                 <Card
                   key={exam.id}
@@ -228,7 +243,7 @@ export default function Page() {
                         <span className="mb-1 block text-xs text-muted-foreground">
                           Qiymət
                         </span>
-                        <p className="font-medium">{exam.price} AZN</p>
+                        <p className="font-medium">{formatAzn(exam.price)}</p>
                       </div>
                       <div>
                         <span className="mb-1 block text-xs text-muted-foreground">
@@ -241,15 +256,16 @@ export default function Page() {
                     <div className="mt-4 border-t border-border pt-4">
                       <Button
                         size="sm"
-                        onClick={() =>
+                        onClick={() => {
+                          if (sellablePrice === null) return;
                           setSelectedExam({
                             id: exam.id,
                             code: exam.code,
                             title: exam.title,
-                            price: exam.price,
+                            price: sellablePrice,
                             status: exam.status,
-                          })
-                        }
+                          });
+                        }}
                         disabled={!sellable}
                         title={
                           sellable

@@ -27,6 +27,37 @@ export type CurrentUser = {
   branches: Branch[];
 };
 
+export async function fetchCurrentUser(token: string): Promise<CurrentUser> {
+  let response: Response;
+  try {
+    response = await fetch("/api/auth/me", {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+  } catch {
+    throw new Error("Serverlə əlaqə qurulmadı. Yenidən cəhd edin.");
+  }
+  if (!response.ok) throw new Error("İstifadəçi məlumatları alınmadı. Yenidən daxil olun.");
+  let identity: CurrentUser;
+  try {
+    identity = (await response.json()) as CurrentUser;
+  } catch {
+    throw new Error("İstifadəçi məlumatları etibarlı deyil.");
+  }
+  if (
+    !identity ||
+    typeof identity.userId !== "string" ||
+    typeof identity.email !== "string" ||
+    typeof identity.fullName !== "string" ||
+    !Array.isArray(identity.branches) ||
+    identity.branches.some(
+      (b) => !b || typeof b.id !== "string" || typeof b.name !== "string",
+    )
+  )
+    throw new Error("İstifadəçi məlumatları etibarlı deyil.");
+  return identity;
+}
+
 export async function authenticate(email: string, password: string) {
   let response: Response;
   try {

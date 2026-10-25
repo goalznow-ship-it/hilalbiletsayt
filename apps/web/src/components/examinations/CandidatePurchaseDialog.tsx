@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/components/session-provider";
+import { formatAzn } from "@/lib/money";
 import Link from "next/link";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -236,7 +237,7 @@ export default function CandidatePurchaseDialog({
               </div>
               <div className="text-right">
                 <span className="text-xs text-muted-foreground">Qiymət</span>
-                <p className="text-lg font-medium">{ticket.price} AZN</p>
+                <p className="text-lg font-medium">{formatAzn(ticket.price)}</p>
               </div>
             </div>
             <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
@@ -291,7 +292,7 @@ export default function CandidatePurchaseDialog({
             </p>
             <h3 className="mt-1 text-title font-medium">{exam.title}</h3>
             <p className="text-caption text-muted-foreground">
-              {exam.code} · {exam.price} AZN
+              {exam.code} · {formatAzn(exam.price)}
             </p>
           </div>
           <Button

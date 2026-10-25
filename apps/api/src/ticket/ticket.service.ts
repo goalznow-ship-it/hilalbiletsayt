@@ -10,7 +10,14 @@ import { AuditService } from "../audit/audit.service";
 import { CreateTicketDto } from "./create-ticket.dto";
 import { TicketQueryDto } from "./ticket-query.dto";
 import { resolvePagination, toPaginated } from "../common/pagination";
-import { AuthenticatedUser, isCentralAdmin, assertBranchAllowed, candidateVisibilityWhere } from "../auth/authorization";
+import {
+  AuthenticatedUser,
+  isCentralAdmin,
+  assertBranchAllowed,
+  candidateVisibilityWhere,
+  getBranchIds,
+} from "../auth/authorization";
+import { isValidQepikPrice } from "../common/money";
 import * as crypto from "crypto";
 
 type TicketView = {
@@ -133,11 +140,7 @@ export class TicketService {
 
     // Branch scoping: non-central users can only see tickets in their branches
     if (!isCentralAdmin(user)) {
-      const branchIds = user.userBranchRoles
-        ? user.userBranchRoles
-            .filter((entry) => entry.role === "BRANCH_MANAGER")
-            .map((entry) => entry.branchId)
-        : (user.branches ?? []).map((branch) => branch.id);
+      const branchIds = getBranchIds(user);
       where.OR = [
         { branchId: { in: branchIds } },
         {
@@ -200,32 +203,32 @@ export class TicketService {
       throw new NotFoundException("Bilet tapılmadı");
     }
 
-    // Branch scoping check for non-central users
-    if (!isCentralAdmin(user) && ticket.branchId) {
-      const branchIds = user.userBranchRoles
-        ? user.userBranchRoles
-            .filter((entry) => entry.role === "BRANCH_MANAGER")
-            .map((entry) => entry.branchId)
-        : (user.branches ?? []).map((branch) => branch.id);
-      if (!branchIds.includes(ticket.branchId)) {
-        // Check if candidate has registration in user's branches
-        if (ticket.candidateId) {
-          const candidateHasAccess = await this.prisma.examinationRegistration.count({
-            where: {
-              candidate_id: ticket.candidateId,
-              branch_id: { in: branchIds },
-            },
-          });
-          if (!candidateHasAccess) {
-            throw new ForbiddenException("Bu biletə icazəniz yoxdur");
-          }
-        } else {
-          throw new ForbiddenException("Bu biletə icazəniz yoxdur");
-        }
-      }
+    await this.assertTicketAccess(ticket, user);
+    return mapTicketView(ticket);
+  }
+
+  private async assertTicketAccess(
+    ticket: { branchId: string | null; candidateId: string | null },
+    user: AuthenticatedUser,
+  ): Promise<void> {
+    if (isCentralAdmin(user)) return;
+
+    const branchIds = getBranchIds(user);
+    if (ticket.branchId && branchIds.includes(ticket.branchId)) return;
+
+    // A candidate registered in one of the user's branches may be visible even
+    // when the ticket itself is not assigned to that branch.
+    if (ticket.candidateId && branchIds.length > 0) {
+      const candidateHasAccess = await this.prisma.examinationRegistration.count({
+        where: {
+          candidate_id: ticket.candidateId,
+          branch_id: { in: branchIds },
+        },
+      });
+      if (candidateHasAccess > 0) return;
     }
 
-    return mapTicketView(ticket);
+    throw new ForbiddenException("Bu biletə icazəniz yoxdur");
   }
 
   async generate(
@@ -243,6 +246,12 @@ export class TicketService {
     if (exam.status !== "PUBLISHED") {
       throw new BadRequestException("İmtahan satış üçün aktiv deyil");
     }
+    if (!isValidQepikPrice(exam.price)) {
+      throw new BadRequestException(
+        "Bu imtahan üçün bilet qiyməti təyin edilməyib",
+      );
+    }
+    const ticketPrice: number = exam.price;
     if (data.price !== undefined && data.price !== exam.price) {
       throw new BadRequestException(
         "Bilet qiyməti imtahanın müəyyən edilmiş qiyməti ilə uyuşmur",
@@ -380,7 +389,7 @@ export class TicketService {
           candidateId: data.candidateId || null,
           branchId,
           sellerId,
-          price: exam.price,
+          price: ticketPrice,
           type: data.type?.trim() || "STANDARD",
           qrCode,
           status: "ACTIVE",
@@ -543,8 +552,8 @@ export class TicketService {
     };
   }
 
-  async findByCode(code: string) {
-    return this.prisma.ticket.findFirst({
+  async findByCode(code: string, user: AuthenticatedUser) {
+    const ticket = await this.prisma.ticket.findFirst({
       where: { code },
       include: {
         exam: { select: { id: true, code: true, title: true } },
@@ -554,6 +563,13 @@ export class TicketService {
         seller: { select: { id: true, email: true, fullName: true } },
       },
     });
+
+    if (!ticket) {
+      throw new NotFoundException("Bilet tapılmadı");
+    }
+
+    await this.assertTicketAccess(ticket, user);
+    return mapTicketView(ticket);
   }
 
   async getUsageStats(filters?: { examId?: string; sessionId?: string }) {

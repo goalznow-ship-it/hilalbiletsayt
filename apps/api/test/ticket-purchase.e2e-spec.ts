@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from "@nestjs/common";
 import type { Branch } from "@prisma/client";
@@ -41,7 +42,7 @@ let branchA: Branch;
 let branchB: Branch;
 
 async function seedExamSession(options?: {
-  price?: number;
+  price?: number | null;
   capacity?: number;
   sessionStatus?: string;
   examStatus?: string;
@@ -50,7 +51,7 @@ async function seedExamSession(options?: {
     data: {
       code: `EX-${randomUUID().slice(0, 8)}`,
       title: "Bilet imtahanı",
-      price: options?.price ?? 35,
+      price: options?.price === undefined ? 3500 : options.price,
       status: options?.examStatus ?? "PUBLISHED",
       createdBy: randomUUID(),
     },
@@ -72,7 +73,7 @@ async function seedExamSession(options?: {
     data: {
       candidate_number: `QD${randomUUID().slice(0, 10).toUpperCase()}`,
       full_name: "Aysel Məmmədova",
-      branch_id: options ? branchA.id : null,
+      branch_id: branchA.id,
     },
   });
 
@@ -126,21 +127,21 @@ afterAll(async () => {
 
 describe("Ticket purchase integration (real PostgreSQL test database)", () => {
   it("creates a ticket with the server-side exam price and a random QR token", async () => {
-    const { exam, session, candidate } = await seedExamSession({ price: 35 });
+    const { exam, session, candidate } = await seedExamSession({ price: 3500 });
 
     const ticket = await ticketService.generate(
       {
         examId: exam.id,
         sessionId: session.id,
         candidateId: candidate.id,
-        price: 35,
+        price: 3500,
         type: "STANDARD",
         paymentMethod: "CASH",
       },
       admin,
     );
 
-    expect(ticket.price).toBe(35);
+    expect(ticket.price).toBe(3500);
     expect(ticket.status).toBe("ACTIVE");
     expect(ticket.paymentStatus).toBe("PENDING");
     expect(ticket.qrCode).toMatch(/^[A-Za-z0-9_-]{43}$/);
@@ -150,12 +151,13 @@ describe("Ticket purchase integration (real PostgreSQL test database)", () => {
     const stored = await prisma.ticket.findUnique({
       where: { id: ticket.id },
     });
+    expect(stored?.price).toBe(3500);
     expect(stored?.paymentStatus).toBe("PENDING");
     expect(stored?.registeredAt).toBeInstanceOf(Date);
   });
 
   it("rejects a client-supplied price that differs from the exam price", async () => {
-    const { exam, session, candidate } = await seedExamSession({ price: 35 });
+    const { exam, session, candidate } = await seedExamSession({ price: 3500 });
 
     await expect(
       ticketService.generate(
@@ -169,6 +171,41 @@ describe("Ticket purchase integration (real PostgreSQL test database)", () => {
         admin,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects a sale when the exam has no configured price", async () => {
+    const { exam, session, candidate } = await seedExamSession({ price: null });
+
+    await expect(
+      ticketService.generate(
+        {
+          examId: exam.id,
+          sessionId: session.id,
+          candidateId: candidate.id,
+        },
+        admin,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(await prisma.ticket.count({ where: { examId: exam.id } })).toBe(0);
+  });
+
+  it("allows an explicitly free exam and stores a zero-qəpik ticket", async () => {
+    const { exam, session, candidate } = await seedExamSession({ price: 0 });
+
+    const ticket = await ticketService.generate(
+      {
+        examId: exam.id,
+        sessionId: session.id,
+        candidateId: candidate.id,
+        price: 0,
+      },
+      admin,
+    );
+
+    expect(ticket.price).toBe(0);
+    const stored = await prisma.ticket.findUnique({ where: { id: ticket.id } });
+    expect(stored?.price).toBe(0);
   });
 
   it("rejects a duplicate active ticket for the same candidate and session", async () => {
@@ -269,6 +306,34 @@ describe("Ticket purchase integration (real PostgreSQL test database)", () => {
         branchManager,
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("requires branch access for legacy ticket-code lookup and omits candidate contact data", async () => {
+    const { exam, session, candidate } = await seedExamSession();
+    const ticket = await ticketService.generate(
+      { examId: exam.id, sessionId: session.id, candidateId: candidate.id },
+      admin,
+    );
+
+    const found = await ticketService.findByCode(ticket.code, admin);
+    expect(found.id).toBe(ticket.id);
+    expect(found).not.toHaveProperty("candidateEmail");
+    expect(found).not.toHaveProperty("candidatePhone");
+    expect(found).not.toHaveProperty("email");
+    expect(found).not.toHaveProperty("phone");
+
+    await expect(
+      ticketService.findByCode("HK-DOES-NOT-EXIST", admin),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    const otherBranchManager: AuthenticatedUser = {
+      userId: randomUUID(),
+      roles: ["BRANCH_MANAGER"],
+      branches: [{ id: branchB.id }],
+    };
+    await expect(
+      ticketService.findByCode(ticket.code, otherBranchManager),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("verifies by opaque QR token without exposing private candidate data", async () => {
