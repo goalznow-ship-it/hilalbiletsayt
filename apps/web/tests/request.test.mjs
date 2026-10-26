@@ -7,6 +7,9 @@ afterEach(() => {
 });
 for (const path of [
   "/users",
+  "/api/users",
+  "/ticket?branchId=test",
+  "/api/ticket?branchId=test",
   "/branches",
   "/exams?status=PUBLISHED",
   "/exam-sessions",
@@ -15,7 +18,7 @@ for (const path of [
 ]) {
   test(`authenticated path ${path} uses exactly one API prefix and Bearer value`, async () => {
     globalThis.fetch = async (url, options) => {
-      assert.equal(url, `/api${path}`);
+      assert.equal(url, `/api${path.replace(/^\/api(?=\/|$)/, "")}`);
       assert.equal(
         options.headers.get("Authorization"),
         "Bearer real-contract-test",

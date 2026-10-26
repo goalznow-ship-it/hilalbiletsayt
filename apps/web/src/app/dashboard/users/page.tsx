@@ -1,138 +1,110 @@
 "use client";
-
 import { useEffect, useState } from "react";
-import { useSession } from "@/components/session-provider";
-import { useBranches } from "@/hooks/use-branches";
-import { Card } from "@/components/ui/card";
-import { PageHeader } from "@/components/page-ui";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
-import { Users, LoaderCircle, CheckCircle, X } from "lucide-react";
-
+import { useSession } from "@/components/session-provider";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/page-ui";
+import { CreateUserDialog } from "@/components/users/create-user-dialog";
+import { RoleManagementDialog } from "@/components/users/role-management-dialog";
 type User = {
   id: string;
   fullName: string;
   email: string;
-  role: string;
-  branchId?: string;
-  isActive: boolean;
-  createdAt: string;
-};
-
-type UserFormValues = {
-  fullName: string;
-  email: string;
-  role: string;
-  branchId: string;
+  roles: string[];
+  branches: { id: string; name: string }[];
   isActive: boolean;
 };
-
-export default function Page() {
-  const { user, request } = useSession();
-  const { branches, loading: branchLoading } = useBranches();
-
-  const [usersData, setUsersData] = useState<User[]>([]);
-
+export default function UsersPage() {
+  const { user, initializing, selectedBranch, request } = useSession();
+  const [result, setResult] = useState<{ data: User[]; total: number } | null>(
+    null,
+  );
+  const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
+  const [reload, setReload] = useState(0);
+  const [create, setCreate] = useState(false);
+  const [roles, setRoles] = useState("");
+  const central = user?.roles?.some((role) =>
+    ["SUPER_ADMIN", "CENTRAL_ADMIN"].includes(role),
+  );
   useEffect(() => {
     if (!user) return;
-    request<User[]>(`/api/user?branchId=${user.branches?.[0]?.id}`).then((data) => {
-      setUsersData(data);
-    });
-  }, [user]);
-
-  if (!user) {
-    return (
-      <div className="min-h-screen p-4">
-        <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-xl font-medium mb-2">Xoş gəlmisiniz</h2>
-          <p className="text-muted-foreground">
-            Filial administratorunuzla əlaqə saxlayın
-          </p>
-          <Link href="/login" className="btn-primary mt-4">
-            Giriş
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
+    let active = true;
+    request<{ data: User[]; total: number }>(
+      `/users?page=${page}${selectedBranch ? `&branchId=${selectedBranch}` : ""}`,
+    )
+      .then((data) => {
+        if (active) {
+          setResult(data);
+          setError("");
+        }
+      })
+      .catch((cause) => {
+        if (active) setError(cause.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [user, request, selectedBranch, page, reload]);
+  if (initializing) return <p role="status">Yüklənir…</p>;
+  if (!user) return <Link href="/login">İdarəetmə panelinə daxil olun</Link>;
   return (
-    <div className="min-h-screen">
+    <>
       <PageHeader
-        eyebrow="İSTİFADƏÇİLƏR"
-        title="İstifadəçi Idarəetmə"
-        description="Sistema əlavə olunan istifadəçilər"
+        title="İstifadəçilər və rollar"
+        description="İcazəniz olan istifadəçilər"
       />
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <div className="p-4 md:p-6">
-            <h3 className="font-medium mb-4">Yeni İstifadəçi Yarad</h3>
-
-            {branchLoading ? (
-              <Skeleton className="animate-pulse" />
-            ) : usersData.length === 0 ? (
-              <p className="text-center text-muted-foreground">
-                İstifadəçi yoxdur
-              </p>
-            ) : (
-              <table className="w-full rounded-md border border-border bg-card">
-                <thead>
-                  <tr className="border-b border-border text-sm font-medium text-muted-foreground">
-                    <th className="py-3">Adı</th>
-                    <th className="py-3">Email</th>
-                    <th className="py-3">Rol</th>
-                    <th className="py-3">Filial</th>
-                    <th className="py-3">Status</th>
-                    <th className="py-3">Əməliyyat</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {usersData.map((user) => (
-                    <tr key={user.id} className="border-b border-border">
-                      <td>{user.fullName}</td>
-                      <td>{user.email}</td>
-                      <td>{user.role}</td>
-                      <td>{user.branchId || "Filial yoxdur"}</td>
-                      <td>{user.isActive ? "Aktiv" : "Passiv"}</td>
-                      <td>
-                        <Button size="sm" variant="outline">
-                          Redaktə et
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      {error && <p role="alert">{error}</p>}
+      {central && (
+        <Button className="mb-6" onClick={() => setCreate(true)}>
+          Yeni istifadəçi
+        </Button>
+      )}
+      {create && (
+        <CreateUserDialog
+          onClose={() => setCreate(false)}
+          onSuccess={() => setReload((value) => value + 1)}
+        />
+      )}
+      {roles && (
+        <RoleManagementDialog
+          userId={roles}
+          onClose={() => setRoles("")}
+          onSuccess={() => setReload((value) => value + 1)}
+        />
+      )}
+      <div className="grid gap-4 md:grid-cols-2">
+        {result?.data.map((item) => (
+          <Card key={item.id} className="p-5">
+            <h2>{item.fullName}</h2>
+            <p>{item.email}</p>
+            <p>{item.roles.join(", ")}</p>
+            <p>{item.branches.map((branch) => branch.name).join(", ")}</p>
+            <p>{item.isActive ? "Aktiv" : "Passiv"}</p>
+            {central && (
+              <Button variant="outline" onClick={() => setRoles(item.id)}>
+                Rolları dəyiş
+              </Button>
             )}
-          </div>
-        </Card>
-
-        <Card>
-          <div className="p-4 md:p-6">
-            <h3 className="font-medium mb-4">Istifadəçi Statistikası</h3>
-            {branchLoading ? (
-              <Skeleton className="animate-pulse" />
-            ) : usersData.length === 0 ? (
-              <p className="text-center text-muted-foreground">
-                Statistika yoxdur
-              </p>
-            ) : (
-              <div>
-                <p className="text-sm text-success">
-                  ✓ Umumi istifadəçi: {usersData.length}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  ✓ Aktiv: {usersData.filter((u) => u.isActive).length}
-                  | Passiv: {usersData.filter((u) => !u.isActive).length}
-                </p>
-              </div>
-            )}
-          </div>
-        </Card>
+          </Card>
+        ))}
       </div>
-    </div>
+      {result?.data.length === 0 && <p>İstifadəçi tapılmadı.</p>}
+      <div className="my-6 flex gap-4">
+        <Button
+          disabled={page <= 1}
+          onClick={() => setPage((value) => value - 1)}
+        >
+          Əvvəlki
+        </Button>
+        <Button
+          disabled={!result || page * 20 >= result.total}
+          onClick={() => setPage((value) => value + 1)}
+        >
+          Növbəti
+        </Button>
+      </div>
+    </>
   );
 }

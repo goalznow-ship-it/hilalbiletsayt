@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { isValidQepikPrice } from "../common/money";
 
@@ -127,7 +131,9 @@ export class ExaminationService {
     });
 
     if (exam) {
-      throw new BadRequestException("Bu sənəd kodu ilə already mövcud bir sənəd var");
+      throw new BadRequestException(
+        "Bu sənəd kodu ilə already mövcud bir sənəd var",
+      );
     }
 
     const newExam = await this.prisma.exam.create({
@@ -178,8 +184,19 @@ export class ExaminationService {
       });
 
       if (existing && existing.id !== id) {
-        throw new BadRequestException("Bu sənəd kodu ilə already mövcud bir sənəd var");
+        throw new BadRequestException(
+          "Bu sənəd kodu ilə already mövcud bir sənəd var",
+        );
       }
+    }
+
+    if (
+      (data.status ?? exam.status) === "PUBLISHED" &&
+      !isValidQepikPrice(data.price === undefined ? exam.price : data.price)
+    ) {
+      throw new BadRequestException(
+        "Dərc etmək üçün imtahan qiymətini təyin edin",
+      );
     }
 
     const updatedExam = await this.prisma.exam.update({
@@ -187,7 +204,8 @@ export class ExaminationService {
       data: {
         code: data.code !== undefined ? data.code : exam.code,
         title: data.title !== undefined ? data.title : exam.title,
-        description: data.description !== undefined ? data.description : exam.description,
+        description:
+          data.description !== undefined ? data.description : exam.description,
         price: data.price !== undefined ? data.price : exam.price,
         status: data.status !== undefined ? data.status : exam.status,
       },
@@ -218,6 +236,11 @@ export class ExaminationService {
       throw new BadRequestException("Sənəd DRAFT statusunda olmalıdır");
     }
 
+    if (!isValidQepikPrice(exam.price))
+      throw new BadRequestException(
+        "Dərc etmək üçün imtahan qiymətini təyin edin",
+      );
+
     const updatedExam = await this.prisma.exam.update({
       where: { id },
       data: { status: "PUBLISHED" },
@@ -241,7 +264,9 @@ export class ExaminationService {
     }
 
     if (exam.status !== "PUBLISHED") {
-      throw new BadRequestException("Yalnız PUBLISHED sənəd arxivləşdirilə bilər");
+      throw new BadRequestException(
+        "Yalnız PUBLISHED sənəd arxivləşdirilə bilər",
+      );
     }
 
     const updatedExam = await this.prisma.exam.update({

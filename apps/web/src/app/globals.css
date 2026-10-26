@@ -947,6 +947,7 @@ select {
   font-size: 12px;
 }
 .table-scroll {
+  position: relative;
   overflow-x: auto;
 }
 .data-table {
@@ -2042,4 +2043,56 @@ input[type="checkbox"] {
     border: 1px solid #d4d4d8 !important;
     break-inside: avoid;
   }
+}
+
+/* Parent ticket sales */
+.public-site { background: #fff; min-height: 100vh; }
+.public-header { max-width: 1200px; margin: auto; padding: 24px; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-bottom: 1px solid var(--border); }
+.public-brand { display: flex; gap: 12px; align-items: center; font-size: 22px; font-weight: 650; color: var(--primary); }
+.public-header nav { display: flex; flex-wrap: wrap; gap: 24px; font-size: 14px; }
+.public-header nav a:hover, .public-main a:hover { text-decoration: underline; }
+.public-main { max-width: 1152px; margin: auto; padding: 32px 24px 80px; }
+.public-hero { padding: 64px 0 80px; max-width: 720px; }
+.public-hero h1 { color: var(--primary); font-size: clamp(40px, 6vw, 72px); line-height: 1.08; letter-spacing: -.045em; font-weight: 650; }
+.public-hero p { max-width: 530px; margin: 24px 0 32px; color: var(--muted-foreground); font-size: 18px; line-height: 1.7; }
+.public-section-title { margin-bottom: 28px; display: flex; justify-content: space-between; gap: 16px; align-items: baseline; flex-wrap: wrap; }
+.public-section-title h2, .public-order h2, .public-ticket h2 { font-size: 28px; font-weight: 600; letter-spacing: -.025em; }
+.public-section-title p { color: var(--muted-foreground); font-size: 14px; }
+.public-exams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.public-exam { padding: 28px; gap: 16px; }
+.public-exam h3 { font-size: 23px; font-weight: 600; line-height: 1.3; }
+.public-exam p { line-height: 1.6; }
+.public-exam li { display: grid; gap: 4px; padding: 14px 0; border-top: 1px solid var(--border); font-size: 14px; }
+.public-exam li span { color: var(--muted-foreground); }
+.public-exam-action { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: auto; padding-top: 20px; border-top: 1px solid var(--border); }
+.public-exam-action strong { font-size: 26px; color: var(--primary); }
+.public-order { max-width: 680px; margin: 48px auto 0; scroll-margin-top: 24px; }
+.public-form { display: grid; gap: 12px; margin-top: 24px; max-width: 640px; }
+.public-form fieldset { display: grid; gap: 12px; min-width: 0; }
+.public-form label { font-size: 14px; font-weight: 600; margin-top: 12px; }
+.public-form select { width: 100%; min-width: 0; height: 44px; padding: 0 12px; border: 1px solid var(--input); border-radius: 8px; background: white; }
+.public-notice { background: var(--muted); padding: 20px; border-radius: 12px; font-size: 14px; line-height: 1.65; margin: 16px 0; }
+.public-footer { max-width: 1152px; margin: auto; padding: 24px; border-top: 1px solid var(--border); color: var(--muted-foreground); font-size: 14px; }
+.public-receipt { max-width: 850px; }
+.public-ticket { padding: 32px; gap: 20px; }
+.public-ticket h1 { font-size: 24px; font-weight: 650; color: var(--primary); }
+.public-ticket dl { display: grid; grid-template-columns: 1fr 2fr; gap: 12px; }
+.public-ticket dt { color: var(--muted-foreground); }
+.public-ticket dd { overflow-wrap: anywhere; font-weight: 500; }
+.public-qr { display: grid; justify-items: center; gap: 16px; margin: 12px 0; }
+@media (max-width: 640px) {
+  .public-header { flex-wrap: wrap; padding: 20px; }
+  .public-header nav { gap: 14px; font-size: 13px; }
+  .public-main { padding: 24px 20px 48px; }
+  .public-hero { padding: 32px 0 48px; }
+  .public-exams { grid-template-columns: minmax(0, 1fr); }
+  .public-exam, .public-ticket { padding: 22px; }
+  .public-ticket dl { grid-template-columns: 1fr; gap: 6px; }
+  .public-ticket dd { margin-bottom: 10px; }
+}
+@media print {
+  @page { size: A4; margin: 14mm; }
+  .public-main { padding: 0; max-width: none; }
+  .public-ticket { box-shadow: none; break-inside: avoid; font-size: 11pt; padding: 20px; }
+  .public-ticket dl { grid-template-columns: 1fr 2fr; }
 }

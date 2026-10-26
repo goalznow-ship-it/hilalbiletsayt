@@ -6,6 +6,14 @@ import { AppModule } from "./app.module";
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
+  // Trust only configured proxy addresses, never arbitrary forwarded headers.
+  const trustedProxies = process.env.API_TRUSTED_PROXIES?.split(",")
+    .map((address) => address.trim())
+    .filter(Boolean);
+  if (trustedProxies?.length) {
+    app.getHttpAdapter().getInstance().set("trust proxy", trustedProxies);
+  }
+
   app.setGlobalPrefix("api");
   app.enableCors({
     origin: process.env.CORS_ORIGIN ?? true,
@@ -21,7 +29,9 @@ async function bootstrap(): Promise<void> {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle("Hilal Bilet Sistemi API")
-    .setDescription("Centralized examination ticket sales and OMR result management API")
+    .setDescription(
+      "Centralized examination ticket sales and OMR result management API",
+    )
     .setVersion("0.1.0")
     .addBearerAuth()
     .build();

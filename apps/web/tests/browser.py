@@ -19,7 +19,7 @@ def run():
     payload = base64.urlsafe_b64encode(json.dumps({"exp": int(time.time()) + 900}).encode()).decode().rstrip("=")
     token = f"e30.{payload}.synthetic-test-signature"
     branches = [{"id": f"fixture-{i}", "name": f"Yoxlama filialı {i}", "code": f"TEST-{i:02}", "phone": "+994 00 000 00 00", "address": "Yalnız test ünvanı", "isActive": True} for i in range(1, 10)]
-    identity = {"userId": "test-user", "email": "ui@example.invalid", "fullName": "UI Yoxlaması", "role": "SUPER_ADMIN", "branches": branches}
+    identity = {"userId": "test-user", "email": "ui@example.invalid", "fullName": "UI Yoxlaması", "role": "SUPER_ADMIN", "roles": ["SUPER_ADMIN"], "branches": branches}
     writes = []
 
     def api(route):
@@ -31,6 +31,8 @@ def run():
         elif path == "/auth/me":
             assert request.headers.get("authorization") == f"Bearer {token}"
             route.fulfill(json=identity)
+        elif path.startswith("/users?") and request.method == "GET":
+            route.fulfill(json={"data": [], "total": 0})
         elif path == "/branches" and request.method == "GET":
             assert request.headers.get("authorization") == f"Bearer {token}"
             route.fulfill(json=[branch for branch in branches if branch["isActive"]])
@@ -74,7 +76,7 @@ def run():
         page.wait_for_url("**/dashboard")
         expect(page.get_by_role("heading", name="Xoş gördük, UI.")).to_be_visible()
         expect(page.locator(".metric-value").first).to_have_text("09")
-        assert page.evaluate("localStorage.length === 0 && sessionStorage.length === 0")
+        assert page.evaluate("localStorage.length === 0 && !!sessionStorage.getItem('hilal.session')")
         for width in [375, 768, 1280, 1728]:
             page.set_viewport_size({"width": width, "height": 960})
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), f"Dashboard overflow at {width}"
@@ -113,14 +115,14 @@ def run():
         page.get_by_role("button", name="Filtrləri təmizlə").click()
         for width in [375, 768, 1280, 1728]:
             page.set_viewport_size({"width": width, "height": 960})
-            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), f"Branches overflow at {width}"
             page.screenshot(path=str(ARTIFACTS / f"branches-{width}.png"), full_page=True)
-        page.get_by_role("link", name="İşçilər və satıcılar — Tezliklə", exact=True).click()
-        expect(page.get_by_text("Tezliklə", exact=True)).to_be_visible()
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), f"Branches overflow at {width}: " + str(page.evaluate("Array.from(document.querySelectorAll('body *')).filter(e => e.getBoundingClientRect().right > innerWidth).slice(0, 8).map(e => [e.tagName, e.className, e.getBoundingClientRect().width])"))
+        page.get_by_role("link", name="İşçilər və satıcılar", exact=True).click()
+        expect(page.get_by_role("heading", name="İstifadəçilər və rollar", exact=True)).to_be_visible()
         assert not errors, errors
         page.reload()
         page.wait_for_load_state("networkidle")
-        expect(page.get_by_role("link", name="Hesaba daxil ol", exact=True).first).to_be_visible()
+        expect(page.get_by_role("heading", name="İstifadəçilər və rollar", exact=True)).to_be_visible()
         browser.close()
     print("UI checks passed; API intercepted; no database writes. Screenshots:", ARTIFACTS)
 

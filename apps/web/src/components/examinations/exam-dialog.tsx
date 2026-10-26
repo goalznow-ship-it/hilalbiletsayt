@@ -14,9 +14,11 @@ type Exam = {
   title: string;
   description?: string;
   status: ExamStatus;
+  price?: number | null;
 };
 
 interface ExamForm {
+  price: string;
   code: string;
   title: string;
   description?: string;
@@ -36,6 +38,7 @@ export function ExamDialog(props: ExamDialogProps) {
 function ExamDialogForm({ examId, onClose, onSuccess }: ExamDialogProps) {
   const { request } = useSession();
   const [form, setForm] = useState<ExamForm>({
+    price: "",
     code: "",
     title: "",
     description: "",
@@ -52,6 +55,8 @@ function ExamDialogForm({ examId, onClose, onSuccess }: ExamDialogProps) {
           const result = await request<Exam>(`/exams/${examId}`);
           if (!cancelled) {
             setForm({
+              price:
+                result.price == null ? "" : (result.price / 100).toFixed(2),
               code: result.code,
               title: result.title,
               description: result.description || "",
@@ -84,17 +89,27 @@ function ExamDialogForm({ examId, onClose, onSuccess }: ExamDialogProps) {
     setLoading(true);
 
     try {
+      const price = form.price.trim()
+        ? Math.round(Number(form.price) * 100)
+        : null;
+      if (
+        price !== null &&
+        (!/^\d+(?:[.]\d{1,2})?$/.test(form.price) ||
+          !Number.isSafeInteger(price))
+      )
+        throw new Error("Qiyməti AZN ilə daxil edin, ən çox 2 qəpik rəqəmi.");
+      const payload = { ...form, price };
       if (examId) {
         await request(`/exams/${examId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
+          body: JSON.stringify(payload),
         });
       } else {
         await request("/exams", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
+          body: JSON.stringify(payload),
         });
       }
 
@@ -129,7 +144,18 @@ function ExamDialogForm({ examId, onClose, onSuccess }: ExamDialogProps) {
       )}
 
       <form onSubmit={handleSubmit} className="grid gap-4">
+        <label htmlFor="exam-price">
+          Qiymət (AZN; boş = təyin edilməyib, 0 = pulsuz)
+        </label>
         <Input
+          id="exam-price"
+          name="price"
+          inputMode="decimal"
+          value={form.price}
+          onChange={handleInputChange}
+        />
+        <Input
+          aria-label="İmtahan kodu"
           name="code"
           placeholder="Sənəd kodu"
           value={form.code}
@@ -137,6 +163,7 @@ function ExamDialogForm({ examId, onClose, onSuccess }: ExamDialogProps) {
           required
         />
         <Input
+          aria-label="İmtahan adı"
           name="title"
           placeholder="Başlıq"
           value={form.title}
@@ -144,6 +171,7 @@ function ExamDialogForm({ examId, onClose, onSuccess }: ExamDialogProps) {
           required
         />
         <Input
+          aria-label="Qısa məlumat"
           name="description"
           placeholder="Əlavə məlumat"
           value={form.description}
@@ -151,6 +179,8 @@ function ExamDialogForm({ examId, onClose, onSuccess }: ExamDialogProps) {
         />
 
         <select
+          aria-label="İmtahan statusu"
+          value={form.status}
           name="status"
           onChange={handleInputChange}
           className="mt-1 block w-full rounded border-input"
@@ -162,6 +192,9 @@ function ExamDialogForm({ examId, onClose, onSuccess }: ExamDialogProps) {
 
         <Button type="submit" className="mt-4 w-full">
           {examId ? "Dəyişdir" : "Yadda saxla"}
+        </Button>
+        <Button type="button" variant="outline" onClick={onClose}>
+          Bağla
         </Button>
       </form>
     </Card>

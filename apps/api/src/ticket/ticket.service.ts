@@ -49,32 +49,34 @@ type TicketView = {
   sellerFullName: string | null;
 };
 
-function mapTicketView(
-  ticket: {
+function mapTicketView(ticket: {
+  id: string;
+  code: string;
+  examId: string;
+  sessionId: string | null;
+  candidateId: string | null;
+  branchId: string | null;
+  sellerId: string | null;
+  price: number;
+  status: string;
+  type: string;
+  qrCode: string | null;
+  registeredAt: Date;
+  usedAt: Date | null;
+  usedBy: string | null;
+  paymentStatus: string;
+  paymentMethod: string | null;
+  paymentDate: Date | null;
+  exam: { id: string; code: string; title: string };
+  session?: { id: string; sessionCode: string } | null;
+  candidate?: {
     id: string;
-    code: string;
-    examId: string;
-    sessionId: string | null;
-    candidateId: string | null;
-    branchId: string | null;
-    sellerId: string | null;
-    price: number;
-    status: string;
-    type: string;
-    qrCode: string | null;
-    registeredAt: Date;
-    usedAt: Date | null;
-    usedBy: string | null;
-    paymentStatus: string;
-    paymentMethod: string | null;
-    paymentDate: Date | null;
-    exam: { id: string; code: string; title: string };
-    session?: { id: string; sessionCode: string } | null;
-    candidate?: { id: string; candidate_number: string; full_name: string } | null;
-    branch?: { id: string; name: string; code: string } | null;
-    seller?: { id: string; email: string; fullName: string } | null;
-  },
-): TicketView {
+    candidate_number: string;
+    full_name: string;
+  } | null;
+  branch?: { id: string; name: string; code: string } | null;
+  seller?: { id: string; email: string; fullName: string } | null;
+}): TicketView {
   return {
     id: ticket.id,
     code: ticket.code,
@@ -96,10 +98,8 @@ function mapTicketView(
     examCode: ticket.exam.code,
     examTitle: ticket.exam.title,
     sessionCode: ticket.session?.sessionCode ?? null,
-    candidateNumber:
-      ticket.candidate?.candidate_number ?? null,
-    candidateFullName:
-      ticket.candidate?.full_name ?? null,
+    candidateNumber: ticket.candidate?.candidate_number ?? null,
+    candidateFullName: ticket.candidate?.full_name ?? null,
     branchName: ticket.branch?.name ?? null,
     branchCode: ticket.branch?.code ?? null,
     sellerEmail: ticket.seller?.email ?? null,
@@ -161,7 +161,9 @@ export class TicketService {
         include: {
           exam: { select: { id: true, code: true, title: true } },
           session: { select: { id: true, sessionCode: true } },
-          candidate: { select: { id: true, candidate_number: true, full_name: true } },
+          candidate: {
+            select: { id: true, candidate_number: true, full_name: true },
+          },
           branch: { select: { id: true, name: true, code: true } },
           seller: { select: { id: true, email: true, fullName: true } },
         },
@@ -173,14 +175,16 @@ export class TicketService {
     ]);
 
     return toPaginated(
-      rows.map((row) => mapTicketView({
-        ...row,
-        exam: row.exam,
-        session: row.session,
-        candidate: row.candidate,
-        branch: row.branch,
-        seller: row.seller,
-      })),
+      rows.map((row) =>
+        mapTicketView({
+          ...row,
+          exam: row.exam,
+          session: row.session,
+          candidate: row.candidate,
+          branch: row.branch,
+          seller: row.seller,
+        }),
+      ),
       total,
       page,
       limit,
@@ -193,7 +197,9 @@ export class TicketService {
       include: {
         exam: { select: { id: true, code: true, title: true } },
         session: { select: { id: true, sessionCode: true } },
-        candidate: { select: { id: true, candidate_number: true, full_name: true } },
+        candidate: {
+          select: { id: true, candidate_number: true, full_name: true },
+        },
         branch: { select: { id: true, name: true, code: true } },
         seller: { select: { id: true, email: true, fullName: true } },
       },
@@ -219,22 +225,20 @@ export class TicketService {
     // A candidate registered in one of the user's branches may be visible even
     // when the ticket itself is not assigned to that branch.
     if (ticket.candidateId && branchIds.length > 0) {
-      const candidateHasAccess = await this.prisma.examinationRegistration.count({
-        where: {
-          candidate_id: ticket.candidateId,
-          branch_id: { in: branchIds },
-        },
-      });
+      const candidateHasAccess =
+        await this.prisma.examinationRegistration.count({
+          where: {
+            candidate_id: ticket.candidateId,
+            branch_id: { in: branchIds },
+          },
+        });
       if (candidateHasAccess > 0) return;
     }
 
     throw new ForbiddenException("Bu biletə icazəniz yoxdur");
   }
 
-  async generate(
-    data: CreateTicketDto,
-    user: AuthenticatedUser,
-  ) {
+  async generate(data: CreateTicketDto, user: AuthenticatedUser) {
     // The server, not the client, decides the sale price.
     const exam = await this.prisma.exam.findUnique({
       where: { id: data.examId },
@@ -309,12 +313,10 @@ export class TicketService {
       }
     }
 
-    let paymentDate: Date | null = null;
     if (data.paymentDate) {
-      paymentDate = new Date(data.paymentDate);
-      if (Number.isNaN(paymentDate.getTime())) {
-        throw new BadRequestException("Ödəniş tarixi düzgün deyil");
-      }
+      throw new BadRequestException(
+        "Ödəniş tarixini sistem ödəniş təsdiqlənəndə təyin edir.",
+      );
     }
 
     // Generate an unguessable verification token; the QR payload carries a
@@ -350,7 +352,10 @@ export class TicketService {
         }
 
         const activeCount = await tx.ticket.count({
-          where: { sessionId: data.sessionId, status: "ACTIVE" },
+          where: {
+            sessionId: data.sessionId,
+            status: { in: ["ACTIVE", "USED"] },
+          },
         });
         if (activeCount >= session.capacity) {
           throw new BadRequestException("Sessiya kapasitəsi doldurulub");
@@ -369,7 +374,7 @@ export class TicketService {
             where: {
               candidateId: data.candidateId,
               sessionId: data.sessionId,
-              status: "ACTIVE",
+              status: { in: ["ACTIVE", "USED"] },
             },
             select: { id: true },
           });
@@ -395,12 +400,14 @@ export class TicketService {
           status: "ACTIVE",
           paymentStatus: "PENDING",
           paymentMethod: data.paymentMethod ?? null,
-          paymentDate,
+          paymentDate: null,
         },
         include: {
           exam: { select: { id: true, code: true, title: true } },
           session: { select: { id: true, sessionCode: true } },
-          candidate: { select: { id: true, candidate_number: true, full_name: true } },
+          candidate: {
+            select: { id: true, candidate_number: true, full_name: true },
+          },
           branch: { select: { id: true, name: true, code: true } },
           seller: { select: { id: true, email: true, fullName: true } },
         },
@@ -480,7 +487,40 @@ export class TicketService {
     };
   }
 
-  async useTicket(ticketId: string, userId: string) {
+  async confirmPayment(ticketId: string, user: AuthenticatedUser) {
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id: ticketId },
+    });
+    if (!ticket) throw new NotFoundException("Bilet tapılmadı");
+    await this.assertTicketAccess(ticket, user);
+    if (
+      ticket.status !== "ACTIVE" ||
+      !["PENDING", "PAID"].includes(ticket.paymentStatus)
+    )
+      throw new BadRequestException("Bu biletin ödənişi təsdiqlənə bilməz");
+    return this.prisma.$transaction(async (tx) => {
+      const result = await tx.ticket.updateMany({
+        where: { id: ticketId, status: "ACTIVE", paymentStatus: "PENDING" },
+        data: {
+          paymentStatus: "PAID",
+          paymentMethod: "CASH",
+          paymentDate: new Date(),
+        },
+      });
+      if (result.count)
+        await this.audit.log(
+          "TICKET_PAYMENT_CONFIRMED",
+          user.userId,
+          "Ticket",
+          ticketId,
+          { price: ticket.price },
+          tx,
+        );
+      return { confirmed: true };
+    });
+  }
+
+  async useTicket(ticketId: string, user: AuthenticatedUser) {
     const ticket = await this.prisma.ticket.findUnique({
       where: { id: ticketId },
     });
@@ -489,22 +529,36 @@ export class TicketService {
       throw new NotFoundException("Bilet tapılmadı");
     }
 
+    await this.assertTicketAccess(ticket, user);
+    if (ticket.paymentStatus !== "PAID" && ticket.price > 0)
+      throw new BadRequestException("Biletin ödənişi təsdiqlənməyib");
     if (ticket.status !== "ACTIVE") {
-      throw new BadRequestException("Bu bilet artıq employed edilmişdir və ya ləğv edilib");
+      throw new BadRequestException(
+        "Bu bilet artıq istifadə edilib və ya ləğv edilib",
+      );
     }
 
     // Mark ticket as used
-    const updated = await this.prisma.ticket.update({
-      where: { id: ticketId },
-      data: {
-        status: "USED",
-        usedAt: new Date(),
-        usedBy: userId,
+    const claimed = await this.prisma.ticket.updateMany({
+      where: {
+        id: ticketId,
+        status: "ACTIVE",
+        OR: [{ paymentStatus: "PAID" }, { price: 0 }],
       },
+      data: { status: "USED", usedAt: new Date(), usedBy: user.userId },
+    });
+    if (!claimed.count)
+      throw new ConflictException(
+        "Bilet artıq istifadə edilib və ya ləğv olunub",
+      );
+    const updated = await this.prisma.ticket.findUniqueOrThrow({
+      where: { id: ticketId },
       include: {
         exam: { select: { id: true, code: true, title: true } },
         session: { select: { id: true, sessionCode: true } },
-        candidate: { select: { id: true, candidate_number: true, full_name: true } },
+        candidate: {
+          select: { id: true, candidate_number: true, full_name: true },
+        },
         branch: { select: { id: true, name: true, code: true } },
         seller: { select: { id: true, email: true, fullName: true } },
       },
@@ -534,13 +588,20 @@ export class TicketService {
       throw new ForbiddenException("Bilet ləğv edə bilməzsiniz");
     }
 
-    const updated = await this.prisma.ticket.update({
-      where: { id: ticketId },
+    const cancelled = await this.prisma.ticket.updateMany({
+      where: { id: ticketId, status: "ACTIVE" },
       data: { status: "CANCELLED" },
+    });
+    if (!cancelled.count)
+      throw new ConflictException("Bilet statusu dəyişib. Yenidən yoxlayın");
+    const updated = await this.prisma.ticket.findUniqueOrThrow({
+      where: { id: ticketId },
       include: {
         exam: { select: { id: true, code: true, title: true } },
         session: { select: { id: true, sessionCode: true } },
-        candidate: { select: { id: true, candidate_number: true, full_name: true } },
+        candidate: {
+          select: { id: true, candidate_number: true, full_name: true },
+        },
         branch: { select: { id: true, name: true, code: true } },
         seller: { select: { id: true, email: true, fullName: true } },
       },
@@ -558,7 +619,9 @@ export class TicketService {
       include: {
         exam: { select: { id: true, code: true, title: true } },
         session: { select: { id: true, sessionCode: true } },
-        candidate: { select: { id: true, candidate_number: true, full_name: true } },
+        candidate: {
+          select: { id: true, candidate_number: true, full_name: true },
+        },
         branch: { select: { id: true, name: true, code: true } },
         seller: { select: { id: true, email: true, fullName: true } },
       },
@@ -572,23 +635,26 @@ export class TicketService {
     return mapTicketView(ticket);
   }
 
-  async getUsageStats(filters?: { examId?: string; sessionId?: string }) {
-    const where: any = {};
-
-    if (filters?.examId) {
-      where.examId = filters.examId;
-    }
-
-    if (filters?.sessionId) {
-      where.sessionId = filters.sessionId;
-    }
-
-    const [total, used, active] = await Promise.all([
-      this.prisma.ticket.count({ where }),
-      this.prisma.ticket.count({ where: { ...where, status: "USED" } }),
-      this.prisma.ticket.count({ where: { ...where, status: "ACTIVE" } }),
-    ]);
-
-    return { total, used, active };
+  async getUsageStats(filters: TicketQueryDto, user: AuthenticatedUser) {
+    const where = {
+      ...(filters.examId ? { examId: filters.examId } : {}),
+      ...(filters.sessionId ? { sessionId: filters.sessionId } : {}),
+      ...(filters.branchId ? { branchId: filters.branchId } : {}),
+      ...(!isCentralAdmin(user)
+        ? {
+            branchId: {
+              in: filters.branchId
+                ? getBranchIds(user).filter((id) => id === filters.branchId)
+                : getBranchIds(user),
+            },
+          }
+        : {}),
+    };
+    return this.prisma.ticket.groupBy({
+      by: ["status", "paymentStatus"],
+      where,
+      _count: { _all: true },
+      _sum: { price: true },
+    });
   }
 }

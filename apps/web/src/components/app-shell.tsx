@@ -22,6 +22,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const { user, selectedBranch, selectBranch } = useSession();
   if (
+    pathname === "/" ||
+    pathname.startsWith("/orders/") ||
+    pathname === "/tickets/verify" ||
     pathname === "/login" ||
     pathname.startsWith("/auth/") ||
     pathname.startsWith("/tickets/verify/")
@@ -29,7 +32,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   const current =
     navigation.find((item) => pathname === item.href) ?? navigation[0];
-  const central = ["SUPER_ADMIN", "CENTRAL_ADMIN"].includes(user?.role ?? "");
+  const central = (user?.roles ?? [user?.role]).some((role) =>
+    ["SUPER_ADMIN", "CENTRAL_ADMIN"].includes(role ?? ""),
+  );
   const sidebar = (
     <>
       <Link
@@ -64,12 +69,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               href={href}
               key={href}
               onClick={() => setOpen(false)}
-              className={`nav-link ${index > 1 ? "is-upcoming" : ""} ${pathname === href ? "is-active" : ""}`}
+              className={`nav-link ${["/dashboard/omr", "/dashboard/results", "/dashboard/settings"].includes(href) ? "is-upcoming" : ""} ${pathname === href ? "is-active" : ""}`}
               aria-current={pathname === href ? "page" : undefined}
             >
               <Icon aria-hidden="true" />
               <span>{label}</span>
-              {index > 1 && (
+              {[
+                "/dashboard/omr",
+                "/dashboard/results",
+                "/dashboard/settings",
+              ].includes(href) && (
                 <>
                   <span className="nav-dot" aria-hidden="true" />
                   <span className="sr-only"> — Tezliklə</span>

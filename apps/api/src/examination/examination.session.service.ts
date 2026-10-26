@@ -87,7 +87,10 @@ export class ExaminationSessionService {
         mapSession(
           session,
           await this.prisma.ticket.count({
-            where: { sessionId: session.id, status: "ACTIVE" },
+            where: {
+              sessionId: session.id,
+              status: { in: ["ACTIVE", "USED"] },
+            },
           }),
         ),
       ),
@@ -106,7 +109,7 @@ export class ExaminationSessionService {
     return mapSession(
       session,
       await this.prisma.ticket.count({
-        where: { sessionId: session.id, status: "ACTIVE" },
+        where: { sessionId: session.id, status: { in: ["ACTIVE", "USED"] } },
       }),
     );
   }
@@ -191,7 +194,10 @@ export class ExaminationSessionService {
           const activeCount = await tx.examinationRegistration.count({
             where: { session_id: id, status: "ACTIVE" },
           });
-          if (activeCount > 0) {
+          const ticketCount = await tx.ticket.count({
+            where: { sessionId: id, status: { in: ["ACTIVE", "USED"] } },
+          });
+          if (activeCount > 0 || ticketCount > 0) {
             throw new BadRequestException(
               "Aktiv qeydiyyatı olan sessiya ləğv edilə bilməz",
             );
@@ -210,7 +216,10 @@ export class ExaminationSessionService {
         const activeCount = await tx.examinationRegistration.count({
           where: { session_id: id, status: "ACTIVE" },
         });
-        if (nextCapacity < activeCount) {
+        const ticketCount = await tx.ticket.count({
+          where: { sessionId: id, status: { in: ["ACTIVE", "USED"] } },
+        });
+        if (nextCapacity < Math.max(activeCount, ticketCount)) {
           throw new BadRequestException(
             "Kapasitet aktiv qeydiyyat sayından az ola bilməz",
           );

@@ -1,13 +1,5 @@
 import { Type } from "class-transformer";
-import {
-  IsUUID,
-  IsOptional,
-  IsInt,
-  IsString,
-  IsNotEmpty,
-  IsBoolean,
-  IsIn,
-} from "class-validator";
+import { IsUUID, IsOptional, IsInt, IsIn } from "class-validator";
 
 export const TICKET_STATUSES = ["ACTIVE", "USED", "CANCELLED"] as const;
 
@@ -34,10 +26,12 @@ export class TicketQueryDto {
   @IsOptional()
   status?: TicketStatus;
 
+  @Type(() => Number)
   @IsInt()
   @IsOptional()
   page?: number;
 
+  @Type(() => Number)
   @IsInt()
   @IsOptional()
   limit?: number;

@@ -1,173 +1,259 @@
 "use client";
-
 import { useEffect, useState } from "react";
-import { useSession } from "@/components/session-provider";
-import { useBranches } from "@/hooks/use-branches";
-import { Card } from "@/components/ui/card";
-import { PageHeader } from "@/components/page-ui";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
-import { GraduationCap } from "lucide-react";
+import { useSession } from "@/components/session-provider";
+import { PageHeader } from "@/components/page-ui";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ExamDialog } from "@/components/examinations/exam-dialog";
 import { formatAzn } from "@/lib/money";
-
+import { sessionDate } from "@/lib/public-sales";
 type Exam = {
   id: string;
-  code: string;
   title: string;
-  description?: string;
-  date: string;
-  startTime: string;
-  location: string;
-  price: number;
-  branchName: string;
-  duration?: string;
-  capacity?: number;
-  registered?: number;
-  status: "ACTIVE" | "COMPLETED" | "CANCELLED";
-};
-
-type ExamFormValues = {
   code: string;
-  title: string;
-  price: number;
+  price: number | null;
+  status: string;
 };
-
-export default function Page() {
-  const { user, request } = useSession();
-  const { branches, loading: branchLoading } = useBranches();
-
-  const [examsData, setExamsData] = useState<Exam[]>([]);
-
+type Session = {
+  id: string;
+  sessionCode: string;
+  startsAt: string;
+  capacity: number;
+  registered: number;
+  status: string;
+};
+export default function ExamsPage() {
+  const { user, initializing, request } = useSession();
+  const [exams, setExams] = useState<Exam[] | null>(null);
+  const [error, setError] = useState("");
+  const [edit, setEdit] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Exam | null>(null);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [reload, setReload] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const central = user?.roles?.some((role) =>
+    ["SUPER_ADMIN", "CENTRAL_ADMIN"].includes(role),
+  );
   useEffect(() => {
     if (!user) return;
-    request<Exam[]>(`/api/exam?branchId=${user.branches?.[0]?.id ?? ""}`).then((data) => {
-      setExamsData(data);
-    });
-  }, [user]);
-
-  const handleCreate = (values: ExamFormValues) => {
-    setExamsData(prev => [...prev, {
-      id: "new",
-      code: values.code,
-      title: values.title,
-      date: new Date().toISOString().split("T")[0],
-      startTime: "09:00",
-      location: "",
-      price: values.price,
-      branchName: user?.fullName ?? "Filial",
-      duration: "3 saat",
-      capacity: 100,
-      registered: 0,
-      status: "ACTIVE",
-    } as Exam]);
-  };
-
-  if (!user) {
-    return (
-      <div className="min-h-screen p-4">
-        <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-xl font-medium mb-2">Xoş gəlmisiniz</h2>
-          <p className="text-muted-foreground">
-            Filial administratorunuzla əlaqə saxlayın
-          </p>
-          <Link href="/login" className="btn-primary mt-4">
-            Giriş
-          </Link>
-        </div>
-      </div>
-    );
+    let active = true;
+    request<Exam[]>("/exams")
+      .then((data) => {
+        if (active) setExams(data);
+      })
+      .catch((cause) => {
+        if (active) setError(cause.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [user, request, reload]);
+  useEffect(() => {
+    if (!selected) return;
+    let active = true;
+    request<Session[]>(`/exam-sessions?examId=${selected.id}`)
+      .then((data) => {
+        if (active) setSessions(data);
+      })
+      .catch((cause) => {
+        if (active) setError(cause.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selected, request, reload]);
+  async function changeSession(id: string, status: string) {
+    setBusy(true);
+    setError("");
+    try {
+      await request(`/exam-sessions/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+      setReload((value) => value + 1);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Sessiya yenilənmədi.");
+    } finally {
+      setBusy(false);
+    }
   }
-
+  async function createSession(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy || !selected) return;
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    setBusy(true);
+    setError("");
+    try {
+      await request("/exam-sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          examId: selected.id,
+          sessionCode: data.get("sessionCode"),
+          startsAt: new Date(`${data.get("startsAt")}:00+04:00`).toISOString(),
+          endsAt: new Date(`${data.get("endsAt")}:00+04:00`).toISOString(),
+          capacity: Number(data.get("capacity")),
+          venue: data.get("venue"),
+        }),
+      });
+      form.reset();
+      setReload((value) => value + 1);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Sessiya yaradılmadı.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (initializing) return <p role="status">Yüklənir…</p>;
+  if (!user) return <Link href="/login">İdarəetmə panelinə daxil olun</Link>;
   return (
-    <div className="min-h-screen">
+    <>
       <PageHeader
-        eyebrow="İMTAHAT SİSTEMLİ"
-        title="İmtahat Listesi"
-        description="Yerli imtahanlar haqqında məlumatlar"
+        title="İmtahanlar və sessiyalar"
+        description="Qiymətlər, dərc və sessiya satışı"
       />
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <div className="p-4 md:p-6">
-            <h3 className="font-medium mb-4">Yeni İmtahan Əlavə Et</h3>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleCreate({ code: "IMT-001", title: "Test İmtahası", price: 50 });
-              }}
-            >
-              <Input
-                type="text"
-                value=""
-                onChange={() => {}}
-                placeholder="İmtahan kodu"
-                disabled
-              />
-              <Input
-                type="text"
-                value=""
-                onChange={() => {}}
-                placeholder="İmtahan başlığı"
-                disabled
-              />
-              <Input
-                type="number"
-                value={50}
-                onChange={() => {}}
-                min={0}
-                disabled
-              />
-              <Button type="submit">İmtahan əlavə et</Button>
+      {error && (
+        <p role="alert" className="my-4 text-destructive">
+          {error}
+        </p>
+      )}
+      {central && (
+        <Button className="mb-6" onClick={() => setEdit("")}>
+          Yeni imtahan
+        </Button>
+      )}
+      {edit !== null && (
+        <ExamDialog
+          examId={edit || undefined}
+          onClose={() => setEdit(null)}
+          onSuccess={() => setReload((value) => value + 1)}
+        />
+      )}
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
+        {exams?.map((exam) => (
+          <Card key={exam.id} className="p-5">
+            <h2 className="text-lg font-semibold">
+              {exam.code} · {exam.title}
+            </h2>
+            <p>
+              {formatAzn(exam.price)} ·{" "}
+              {
+                (
+                  {
+                    DRAFT: "Qaralama",
+                    PUBLISHED: "Dərc edilib",
+                    ARCHIVED: "Arxiv",
+                  } as Record<string, string>
+                )[exam.status]
+              }
+            </p>
+            <div className="flex gap-3">
+              {central && (
+                <Button variant="outline" onClick={() => setEdit(exam.id)}>
+                  Redaktə et
+                </Button>
+              )}
               <Button
-                type="button"
                 variant="outline"
-                onClick={() => {}}
+                onClick={() => {
+                  setSessions([]);
+                  setSelected(exam);
+                }}
               >
-                Läğv et
+                Sessiyalar
+              </Button>
+            </div>
+          </Card>
+        ))}
+      </div>
+      {exams?.length === 0 && <p>İmtahan yoxdur.</p>}
+      {selected && (
+        <section className="mt-8">
+          <h2 className="text-xl font-semibold">
+            {selected.title}: sessiyalar
+          </h2>
+          <div className="my-4 grid gap-4">
+            {sessions.map((session) => (
+              <Card key={session.id} className="p-5">
+                <h3>
+                  {session.sessionCode} · {sessionDate(session.startsAt)}
+                </h3>
+                <p>
+                  {session.registered}/{session.capacity} yer · {session.status}
+                </p>
+                {central && (
+                  <div className="flex flex-wrap gap-3">
+                    {session.status === "PLANNED" && (
+                      <Button
+                        disabled={busy}
+                        onClick={() => changeSession(session.id, "OPEN")}
+                      >
+                        Satışı aç
+                      </Button>
+                    )}
+                    {session.status === "OPEN" && (
+                      <Button
+                        disabled={busy}
+                        onClick={() => changeSession(session.id, "CLOSED")}
+                      >
+                        Satışı bağla
+                      </Button>
+                    )}
+                    {["PLANNED", "OPEN"].includes(session.status) && (
+                      <Button
+                        disabled={busy}
+                        variant="outline"
+                        onClick={() => {
+                          if (window.confirm("Sessiya ləğv edilsin?"))
+                            void changeSession(session.id, "CANCELLED");
+                        }}
+                      >
+                        Sessiyanı ləğv et
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </Card>
+            ))}
+          </div>
+          {central && (
+            <form onSubmit={createSession} className="public-form">
+              <h3>Yeni sessiya (Bakı vaxtı)</h3>
+              <label htmlFor="session-code">Sessiya kodu</label>
+              <Input
+                id="session-code"
+                name="sessionCode"
+                required
+                maxLength={50}
+              />
+              <label htmlFor="starts">Başlama vaxtı</label>
+              <Input
+                id="starts"
+                name="startsAt"
+                type="datetime-local"
+                required
+              />
+              <label htmlFor="ends">Bitmə vaxtı</label>
+              <Input id="ends" name="endsAt" type="datetime-local" required />
+              <label htmlFor="venue">İmtahan yeri</label>
+              <Input id="venue" name="venue" maxLength={200} required />
+              <label htmlFor="capacity">Tutum</label>
+              <Input
+                id="capacity"
+                name="capacity"
+                type="number"
+                min={1}
+                required
+              />
+              <Button disabled={busy} type="submit">
+                Sessiya yarat
               </Button>
             </form>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="p-4 md:p-6">
-            <h3 className="font-medium mb-4">İmtahan Listesi</h3>
-
-            {branchLoading ? (
-              <Skeleton className="animate-pulse" />
-            ) : examsData.length === 0 ? (
-              <p className="text-center text-muted-foreground">
-                İmtahan tapılmadı
-              </p>
-            ) : (
-              <table className="w-full rounded-md border border-border bg-card">
-                <thead>
-                  <tr className="border-b border-border text-sm font-medium text-muted-foreground">
-                    <th className="py-3">Kod</th>
-                    <th className="py-3">Başlıq</th>
-                    <th className="py-3">Tarix</th>
-                    <th className="py-3">Qiymət</th>
-                    <th className="py-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {examsData.map((exam) => (
-                    <tr key={exam.code} className="border-b border-border">
-                      <td className="font-mono">{exam.code}</td>
-                      <td>{exam.title}</td>
-                      <td>{exam.date}</td>
-                      <td className="text-right">{formatAzn(exam.price)}</td>
-                      <td>{exam.status}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </Card>
-      </div>
-    </div>
+          )}
+        </section>
+      )}
+    </>
   );
 }

@@ -53,3 +53,10 @@ Last updated: 2026-10-23.
 - The dashboard banner uses only concentric line work, removing the tilted decorative icon and artificial numerical index.
 - Login keeps the split layout, with a 380px form, 50px fields, restrained burgundy line work, and a compact branded mobile view.
 - Existing authentication, API, session lifetime, branch operations, and logo pixels remain unchanged.
+
+## Public sales — 2026-10-26
+
+- `/` uses a white canvas, existing system fonts and burgundy tokens; left-aligned heading, real exam cards and no decorative motion.
+- Reuse Button, Input, Card and official logo. Sales form uses explicit labels and focuses its heading when selected.
+- Receipt uses a separate private capability token; QR verification shows masked identity only. A4 printing hides navigation and instructions outside the ticket.
+- Manual cash payment stays pending until an authorized cashier confirms it.

@@ -77,6 +77,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [expiresAt, clearSession]);
 
   useEffect(() => {
+    if (initializing) return;
     if (!token || !expiresAt) {
       window.sessionStorage.removeItem(SESSION_KEY);
       return;
@@ -85,7 +86,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       SESSION_KEY,
       JSON.stringify({ token, expiresAt, selectedBranch }),
     );
-  }, [token, expiresAt, selectedBranch]);
+  }, [token, expiresAt, selectedBranch, initializing]);
 
   useEffect(() => {
     let active = true;
@@ -100,12 +101,15 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       try {
         const identity = await fetchCurrentUser(stored.token);
         const roles = identity.roles ?? (identity.role ? [identity.role] : []);
-        const nextBranch =
-          identity.branches.some((branch) => branch.id === stored.selectedBranch)
-            ? stored.selectedBranch
-            : roles.some((role) => ["SUPER_ADMIN", "CENTRAL_ADMIN"].includes(role))
-              ? ""
-              : (identity.branches[0]?.id ?? "");
+        const nextBranch = identity.branches.some(
+          (branch) => branch.id === stored.selectedBranch,
+        )
+          ? stored.selectedBranch
+          : roles.some((role) =>
+                ["SUPER_ADMIN", "CENTRAL_ADMIN"].includes(role),
+              )
+            ? ""
+            : (identity.branches[0]?.id ?? "");
         if (active) {
           setUser(identity);
           selectBranch(nextBranch);
@@ -135,8 +139,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setUser(session.user);
     setExpiresAt(session.expiresAt);
     const roles =
-      session.user.roles ??
-      (session.user.role ? [session.user.role] : []);
+      session.user.roles ?? (session.user.role ? [session.user.role] : []);
     selectBranch(
       roles.some((role) => ["SUPER_ADMIN", "CENTRAL_ADMIN"].includes(role))
         ? ""

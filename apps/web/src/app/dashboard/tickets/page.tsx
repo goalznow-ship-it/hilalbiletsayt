@@ -1,169 +1,171 @@
 "use client";
-
 import { useEffect, useState } from "react";
-import { useSession } from "@/components/session-provider";
-import { useBranches } from "@/hooks/use-branches";
-import { Card } from "@/components/ui/card";
-import { PageHeader } from "@/components/page-ui";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
-import { Ticket, Trash } from "lucide-react";
+import { useSession } from "@/components/session-provider";
+import { PageHeader } from "@/components/page-ui";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { formatAzn } from "@/lib/money";
 
 type Ticket = {
   id: string;
   code: string;
-  examCode: string;
   examTitle: string;
-  sessionCode?: string;
-  candidateNumber?: string;
-  candidateFullName?: string;
-  branchName?: string;
-  branchCode?: string;
+  candidateFullName: string | null;
+  branchName: string | null;
   price: number;
-  status: "ACTIVE" | "USED" | "CANCELLED";
-  sellerFullName?: string;
-  createdAt: string;
+  status: string;
+  paymentStatus: string;
+  sellerId: string | null;
 };
-
-type TicketFormValues = {
-  examId: string;
-  price: number;
-};
-
-export default function Page() {
-  const { user, request } = useSession();
-  const { branches, loading: branchLoading } = useBranches();
-
-  const [ticketsData, setTicketsData] = useState<Ticket[]>([]);
-
+export default function TicketsPage() {
+  const { user, initializing, selectedBranch, request } = useSession();
+  const [result, setResult] = useState<{
+    data: Ticket[];
+    total: number;
+  } | null>(null);
+  const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
+  const [reload, setReload] = useState(0);
+  const [busy, setBusy] = useState("");
+  const central = user?.roles?.some((role) =>
+    ["SUPER_ADMIN", "CENTRAL_ADMIN"].includes(role),
+  );
+  const cashier = central || user?.roles?.includes("BRANCH_MANAGER");
   useEffect(() => {
     if (!user) return;
-    const branchId = user.branches?.[0]?.id ?? undefined;
-    request<Ticket[]>(`/api/ticket?branchId=${branchId}`).then((data) => {
-      setTicketsData(data);
-    });
-  }, [user]);
-
-  const handleCreate = (values: TicketFormValues) => {
-    setTicketsData(prev => [...prev, {
-      id: "new",
-      code: "NEW-001",
-      examCode: "IMT-001",
-      examTitle: "Test İmtahanı",
-      price: values.price,
-      status: "ACTIVE",
-    } as Ticket]);
-  };
-
-  const handleDelete = (ticketId: string) => {
-    setTicketsData(prev => prev.filter((t) => t.id !== ticketId));
-  };
-
-  if (!user) {
-    return (
-      <div className="min-h-screen p-4">
-        <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-xl font-medium mb-2">Xoş gəlmisiniz</h2>
-          <p className="text-muted-foreground">
-            Filial administratorunuzla əlaqə saxlayın
-          </p>
-          <Link href="/login" className="btn-primary mt-4">
-            Giriş
-          </Link>
-        </div>
-      </div>
-    );
+    let active = true;
+    request<{ data: Ticket[]; total: number }>(
+      `/ticket?page=${page}&limit=20${selectedBranch ? `&branchId=${selectedBranch}` : ""}`,
+    )
+      .then((data) => {
+        if (active) {
+          setResult(data);
+          setError("");
+        }
+      })
+      .catch((cause) => {
+        if (active) setError(cause.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [user, selectedBranch, request, page, reload]);
+  async function action(ticket: Ticket, operation: string) {
+    if (
+      !window.confirm(
+        operation === "payment"
+          ? `${ticket.code}: ${formatAzn(ticket.price)} nağd ödəniş alındığını təsdiqləyirsiniz?`
+          : `${ticket.code} bileti ləğv edilsin?`,
+      )
+    )
+      return;
+    setBusy(ticket.id);
+    try {
+      await request(`/ticket/${ticket.id}/${operation}`, { method: "PUT" });
+      setReload((value) => value + 1);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Əməliyyat tamamlanmadı.",
+      );
+    } finally {
+      setBusy("");
+    }
   }
-
+  if (initializing) return <p role="status">Yüklənir…</p>;
+  if (!user) return <Link href="/login">İdarəetmə panelinə daxil olun</Link>;
   return (
-    <div className="min-h-screen">
+    <>
       <PageHeader
-        eyebrow="BİLET SATIŞİ"
-        title="Bilet Idarəetmə"
-        description="İmtahan biletləri və satış əməliyyatları"
+        title="Biletlər"
+        description="Real sifarişlər və kassada ödəniş təsdiqi"
       />
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <div className="p-4 md:p-6">
-            <h3 className="font-medium mb-4">Yeni Bilet Yarad</h3>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleCreate({ examId: "test", price: 10 });
-              }}
+      <Link href="/examinations" className="btn-primary mb-6">
+        Bilet sat
+      </Link>
+      {error && (
+        <p role="alert" className="my-4 text-destructive">
+          {error}
+        </p>
+      )}
+      {!result ? (
+        <p role="status">Biletlər yüklənir…</p>
+      ) : (
+        <>
+          <div className="grid gap-4 md:grid-cols-2">
+            {result.data.map((ticket) => (
+              <Card key={ticket.id} className="p-5">
+                <Link href={`/tickets/${ticket.id}`} className="font-semibold">
+                  {ticket.code}
+                </Link>
+                <h2>{ticket.examTitle}</h2>
+                <p>
+                  {ticket.candidateFullName} · {ticket.branchName}
+                </p>
+                <p>
+                  {formatAzn(ticket.price)} ·{" "}
+                  {ticket.paymentStatus === "PAID"
+                    ? "Ödənilib"
+                    : "Ödəniş gözlənilir"}
+                </p>
+                <p>
+                  {
+                    (
+                      {
+                        ACTIVE: "Aktiv",
+                        USED: "İstifadə edilib",
+                        CANCELLED: "Ləğv edilib",
+                      } as Record<string, string>
+                    )[ticket.status]
+                  }
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  {cashier &&
+                    ticket.status === "ACTIVE" &&
+                    ticket.paymentStatus === "PENDING" && (
+                      <Button
+                        disabled={!!busy}
+                        onClick={() => action(ticket, "payment")}
+                      >
+                        Ödənişi təsdiqlə
+                      </Button>
+                    )}
+                  {ticket.status === "ACTIVE" &&
+                    (central || ticket.sellerId === user.userId) && (
+                      <Button
+                        variant="outline"
+                        disabled={!!busy}
+                        onClick={() => action(ticket, "cancel")}
+                      >
+                        Ləğv et
+                      </Button>
+                    )}
+                </div>
+              </Card>
+            ))}
+          </div>
+          {result.data.length === 0 && <p>Bilet tapılmadı.</p>}
+          <div className="my-6 flex items-center gap-4">
+            <Button
+              variant="outline"
+              disabled={page <= 1}
+              onClick={() => setPage((value) => value - 1)}
             >
-              <Input
-                type="number"
-                value={10}
-                onChange={() => {}}
-                min={0}
-                disabled
-              />
-              <Button type="submit">Bilet yarad</Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {}}
-              >
-                Läğv et
-              </Button>
-            </form>
+              Əvvəlki
+            </Button>
+            <span>
+              {page} · {result.total} bilet
+            </span>
+            <Button
+              variant="outline"
+              disabled={page * 20 >= result.total}
+              onClick={() => setPage((value) => value + 1)}
+            >
+              Növbəti
+            </Button>
           </div>
-        </Card>
-
-        <Card>
-          <div className="p-4 md:p-6">
-            <h3 className="font-medium mb-4">Bilet Listesi</h3>
-
-            {branchLoading ? (
-              <Skeleton className="animate-pulse" />
-            ) : ticketsData.length === 0 ? (
-              <p className="text-center text-muted-foreground">
-                Bilet tapılmadı
-              </p>
-            ) : (
-              <table className="w-full rounded-md border border-border bg-card">
-                <thead>
-                  <tr className="border-b border-border text-sm font-medium text-muted-foreground">
-                    <th className="py-3">Bilet Nömrəsi</th>
-                    <th className="py-3">İmtahan</th>
-                    <th className="py-3">Sessiya</th>
-                    <th className="py-3">Namizəd</th>
-                    <th className="py-3 text-center">Qiymət</th>
-                    <th className="py-3">Status</th>
-                    <th className="py-3">Əməliyyat</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ticketsData.map((ticket) => (
-                    <tr key={ticket.code} className="border-b border-border">
-                      <td className="font-mono">{ticket.code}</td>
-                      <td>{ticket.examCode} - {ticket.examTitle}</td>
-                      <td>{ticket.sessionCode || "Sessiya yoxdur"}</td>
-                      <td>{ticket.candidateFullName || "Nömrəsi yox"}</td>
-                      <td className="text-right">{formatAzn(ticket.price)}</td>
-                      <td>{ticket.status}</td>
-                      <td>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleDelete(ticket.id)}
-                        >
-                          Sil
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </Card>
-      </div>
-    </div>
+        </>
+      )}
+    </>
   );
 }

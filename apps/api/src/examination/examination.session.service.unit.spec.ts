@@ -35,6 +35,7 @@ describe("ExaminationSessionService (unit, mocked Prisma)", () => {
       update: ReturnType<typeof vi.fn>;
     };
     examinationRegistration: { count: ReturnType<typeof vi.fn> };
+    ticket: { count: ReturnType<typeof vi.fn> };
   };
 
   beforeEach(() => {
@@ -52,6 +53,7 @@ describe("ExaminationSessionService (unit, mocked Prisma)", () => {
       $queryRaw: vi.fn().mockResolvedValue([]),
       examSession: { findUnique: txFindUnique, create, update: txUpdate },
       examinationRegistration: { count: activeCount },
+      ticket: { count: vi.fn().mockResolvedValue(0) },
     };
 
     const prisma = {

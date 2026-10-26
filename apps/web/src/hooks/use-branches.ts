@@ -14,7 +14,9 @@ export function useBranches() {
     if (!user) return;
     let cancelled = false;
     const controller = new AbortController();
-    const central = ["SUPER_ADMIN", "CENTRAL_ADMIN"].includes(user.role ?? "");
+    const central = (user.roles ?? [user.role]).some((role) =>
+      ["SUPER_ADMIN", "CENTRAL_ADMIN"].includes(role ?? ""),
+    );
     const load = async () => {
       setLoading(true);
       setError("");

@@ -192,6 +192,9 @@ model Ticket {
   paymentMethod String?  
   paymentDate  DateTime?
   notes        String?
+  purchaseKey  String? @unique @db.Uuid
+  purchaseHash String?
+  receiptToken String? @unique
 
   exam        Exam       @relation(fields: [examId], references: [id])
   session     ExamSession? @relation(fields: [sessionId], references: [id])

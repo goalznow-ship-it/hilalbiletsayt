@@ -20,7 +20,7 @@ export async function authenticatedRequest<T>(
   headers.set("Authorization", `Bearer ${token}`);
   let response: Response;
   try {
-    response = await fetch(`/api${path}`, {
+    response = await fetch(`/api${path.replace(/^\/api(?=\/|$)/, "")}`, {
       ...init,
       cache: "no-store",
       headers,

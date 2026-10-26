@@ -16,7 +16,10 @@ export class AuthController {
   @ApiResponse({ status: 201, description: "Login successful" })
   @ApiResponse({ status: 401, description: "Invalid credentials" })
   async login(@Body() loginDto: { email: string; password: string }) {
-    const user = await this.authService.validateUser(loginDto.email, loginDto.password);
+    const user = await this.authService.validateUser(
+      loginDto.email,
+      loginDto.password,
+    );
     const token = await this.authService.login(user);
     return token;
   }
@@ -26,7 +29,6 @@ export class AuthController {
   @ApiOperation({ summary: "Get current user info" })
   @ApiResponse({ status: 200, description: "User info" })
   async getMe(@Req() req: Request) {
-    console.log('User:', req.user); // Debug log
     return req.user;
   }
 }

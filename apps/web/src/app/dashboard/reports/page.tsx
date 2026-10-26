@@ -1,100 +1,77 @@
 "use client";
-
 import { useEffect, useState } from "react";
-import { useSession } from "@/components/session-provider";
-import { useBranches } from "@/hooks/use-branches";
-import { Card } from "@/components/ui/card";
-import { PageHeader } from "@/components/page-ui";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
-import { BarChart3, LoaderCircle, TrendingUp, MapPin } from "lucide-react";
-
-type ReportMetric = {
-  id: string;
-  title: string;
-  value: string;
-  change: string;
-  trend: "up" | "down" | "neutral";
+import { useSession } from "@/components/session-provider";
+import { PageHeader } from "@/components/page-ui";
+import { Card } from "@/components/ui/card";
+import { formatAzn } from "@/lib/money";
+type Metric = {
+  status: string;
+  paymentStatus: string;
+  _count: { _all: number };
+  _sum: { price: number | null };
 };
-
-export default function Page() {
-  const { user, request } = useSession();
-  const { branches, loading: branchLoading } = useBranches();
-
-  const [metrics, setMetrics] = useState<ReportMetric[]>([]);
-
+export default function ReportsPage() {
+  const { user, request, selectedBranch } = useSession();
+  const [rows, setRows] = useState<Metric[] | null>(null);
+  const [error, setError] = useState("");
   useEffect(() => {
     if (!user) return;
-    request<ReportMetric[]>(`/api/report?branchId=${user.branches?.[0]?.id}`).then((data) => {
-      setMetrics(data);
-    });
-  }, [user]);
-
-  if (!user) {
-    return (
-      <div className="min-h-screen p-4">
-        <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-xl font-medium mb-2">Xoş gəlmisiniz</h2>
-          <p className="text-muted-foreground">
-            Filial administratorunuzla əlaqə saxlayın
-          </p>
-          <Link href="/login" className="btn-primary mt-4">
-            Giriş
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
+    let active = true;
+    request<Metric[]>(
+      `/ticket/stats${selectedBranch ? `?branchId=${selectedBranch}` : ""}`,
+    )
+      .then((data) => {
+        if (active) setRows(data);
+      })
+      .catch((cause) => {
+        if (active) setError(cause.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [user, request, selectedBranch]);
+  if (!user) return <Link href="/login">İdarəetmə panelinə daxil olun</Link>;
   return (
-    <div className="min-h-screen">
+    <>
       <PageHeader
-        eyebrow="RƏQİMLƏR"
-        title="Raporlar"
-        description="Metriklər və analytics"
+        title="Satış hesabatı"
+        description="İcazəniz olan filialların real bilet və ödəniş məlumatları"
       />
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <div className="p-4 md:p-6">
-            <h3 className="font-medium mb-4">Metrik Kartları</h3>
-            <div className="grid grid-cols-2 gap-4">
-              {metrics.map((metric) => (
-                <div
-                  key={metric.id}
-                  className={`p-4 rounded-md border border-border bg-card ${metric.trend === "up" ? "border-success bg-success/5" : ""}`}
-                >
-                  <div className="text-success text-sm mb-2">
-                    <BarChart3 className="h-4 w-4" />
-                  </div>
-                  <h4 className="font-medium">{metric.title}</h4>
-                  <p className="text-3xl font-bold">{metric.value}</p>
-                  <p className="text-sm text-muted-foreground">{metric.change}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="p-4 md:p-6">
-            <h3 className="font-medium mb-4">İmtahan Statistikası</h3>
-            {branchLoading ? (
-              <Skeleton className="animate-pulse" />
-            ) : metrics.length === 0 ? (
-              <p className="text-center text-muted-foreground">
-                məlumat yoxdur
+      {error ? (
+        <p role="alert">{error}</p>
+      ) : !rows ? (
+        <p role="status">Hesabat yüklənir…</p>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {rows.length === 0 && <p>Hesabat üçün bilet yoxdur.</p>}
+          {rows.map((row) => (
+            <Card className="p-5" key={`${row.status}-${row.paymentStatus}`}>
+              <h2>
+                {
+                  (
+                    {
+                      ACTIVE: "Aktiv",
+                      USED: "İstifadə edilib",
+                      CANCELLED: "Ləğv edilib",
+                    } as Record<string, string>
+                  )[row.status]
+                }
+              </h2>
+              <p>
+                {row.paymentStatus === "PAID"
+                  ? "Ödənilib"
+                  : row.paymentStatus === "REFUNDED"
+                    ? "Geri qaytarılıb"
+                    : "Ödəniş gözlənilir"}
               </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Umumili {metrics.length} metriq yoxlanıldı
+              <p>
+                {row._count._all} bilet · {formatAzn(row._sum.price)}
               </p>
-            )}
-          </div>
-        </Card>
-      </div>
-    </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </>
   );
 }

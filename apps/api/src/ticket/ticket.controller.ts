@@ -1,3 +1,5 @@
+import { PublicRateGuard } from "../public-sales/public-rate.guard";
+import { Roles, RolesGuard } from "../auth/guards/roles.guard";
 import {
   Body,
   Controller,
@@ -15,7 +17,12 @@ import { TicketQueryDto } from "./ticket-query.dto";
 import { AuthenticatedUser } from "../auth/authorization";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from "@nestjs/swagger";
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from "@nestjs/swagger";
 
 @ApiTags("ticket")
 @Controller("ticket")
@@ -23,7 +30,8 @@ export class TicketController {
   constructor(private readonly ticketService: TicketService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(["SUPER_ADMIN", "CENTRAL_ADMIN", "BRANCH_MANAGER"])
   @ApiOperation({ summary: "Generate new ticket" })
   @ApiResponse({ status: 201, description: "Ticket successfully generated" })
   @ApiBearerAuth()
@@ -51,7 +59,10 @@ export class TicketController {
   @ApiOperation({ summary: "Find ticket by code (authenticated staff)" })
   @ApiResponse({ status: 200, description: "Ticket found" })
   @ApiResponse({ status: 401, description: "Authentication required" })
-  @ApiResponse({ status: 403, description: "Ticket is outside the user's branch scope" })
+  @ApiResponse({
+    status: 403,
+    description: "Ticket is outside the user's branch scope",
+  })
   @ApiResponse({ status: 404, description: "Ticket not found" })
   @ApiBearerAuth()
   async findByCode(
@@ -61,12 +72,22 @@ export class TicketController {
     return this.ticketService.findByCode(code, user);
   }
 
+  @UseGuards(PublicRateGuard)
   @Get("verify/:token")
   @ApiOperation({ summary: "Verify a ticket by its QR token (public)" })
   @ApiResponse({ status: 200, description: "Ticket verification result" })
   @ApiResponse({ status: 404, description: "Ticket not found" })
   async verify(@Param("token") token: string) {
     return this.ticketService.verifyByToken(token);
+  }
+
+  @Get("stats")
+  @UseGuards(JwtAuthGuard)
+  getStats(
+    @Query() query: TicketQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.ticketService.getUsageStats(query, user);
   }
 
   @Get(":id")
@@ -81,13 +102,26 @@ export class TicketController {
     return this.ticketService.findOne(ticketId, user);
   }
 
+  @Put(":id/payment")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(["SUPER_ADMIN", "CENTRAL_ADMIN", "BRANCH_MANAGER"])
+  confirmPayment(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.ticketService.confirmPayment(id, user);
+  }
+
   @Put(":id/use")
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Mark ticket as used (scanned)" })
   @ApiResponse({ status: 200, description: "Ticket marked as used" })
   @ApiBearerAuth()
-  async use(@Param("id") ticketId: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.ticketService.useTicket(ticketId, user.userId);
+  async use(
+    @Param("id") ticketId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.ticketService.useTicket(ticketId, user);
   }
 
   @Put(":id/cancel")
@@ -100,20 +134,5 @@ export class TicketController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.ticketService.cancel(ticketId, user);
-  }
-
-  @Get(":id/stats")
-  @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: "Get ticket usage statistics" })
-  @ApiResponse({ status: 200, description: "Statistics" })
-  @ApiBearerAuth()
-  async getStats(
-    @Param() params: { examId?: string; sessionId?: string },
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.ticketService.getUsageStats({
-      examId: params.examId,
-      sessionId: params.sessionId,
-    });
   }
 }

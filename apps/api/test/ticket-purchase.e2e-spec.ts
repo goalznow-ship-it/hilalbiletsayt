@@ -173,6 +173,24 @@ describe("Ticket purchase integration (real PostgreSQL test database)", () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it("rejects a payment date before payment is confirmed", async () => {
+    const { exam, session, candidate } = await seedExamSession();
+    await expect(
+      ticketService.generate(
+        {
+          examId: exam.id,
+          sessionId: session.id,
+          candidateId: candidate.id,
+          paymentDate: new Date().toISOString(),
+        },
+        admin,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(
+      await prisma.ticket.count({ where: { sessionId: session.id } }),
+    ).toBe(0);
+  });
+
   it("rejects a sale when the exam has no configured price", async () => {
     const { exam, session, candidate } = await seedExamSession({ price: null });
 
@@ -216,6 +234,16 @@ describe("Ticket purchase integration (real PostgreSQL test database)", () => {
       admin,
     );
 
+    await expect(
+      ticketService.generate(
+        { examId: exam.id, sessionId: session.id, candidateId: candidate.id },
+        admin,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    await prisma.ticket.updateMany({
+      where: { sessionId: session.id },
+      data: { status: "USED" },
+    });
     await expect(
       ticketService.generate(
         { examId: exam.id, sessionId: session.id, candidateId: candidate.id },

@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const apiOrigin = process.env.API_ORIGIN ?? "http://127.0.0.1:3001";
 const nextConfig: NextConfig = {
   /* config options here */
+  experimental: { turbopackPluginRuntimeStrategy: "workerThreads" },
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

@@ -31,6 +31,7 @@ function formatDateTime(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString("az-AZ", {
+    timeZone: "Asia/Baku",
     day: "2-digit",
     month: "long",
     year: "numeric",
@@ -145,12 +146,12 @@ export default function VerifyTicket({ token }: { token: string }) {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <dt className="text-xs text-muted-foreground">Sessiya</dt>
-                    <dd className="font-medium">
-                      {result.sessionCode ?? "—"}
-                    </dd>
+                    <dd className="font-medium">{result.sessionCode ?? "—"}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-muted-foreground">Bilet kodu</dt>
+                    <dt className="text-xs text-muted-foreground">
+                      Bilet kodu
+                    </dt>
                     <dd className="font-mono font-medium">{result.code}</dd>
                   </div>
                   <div>
@@ -188,7 +189,15 @@ export default function VerifyTicket({ token }: { token: string }) {
           ) : null}
 
           <div className="mt-5 border-t border-border pt-4 text-center">
-            <Link href="/login" className="text-sm text-primary">
+            {result && (
+              <p>
+                Ödəniş:{" "}
+                {result.paymentStatus === "PAID"
+                  ? "Ödənilib"
+                  : "Ödəniş gözlənilir"}
+              </p>
+            )}
+            <Link href="/" className="text-sm text-primary">
               Hilal Bilet sisteminə keç
             </Link>
           </div>

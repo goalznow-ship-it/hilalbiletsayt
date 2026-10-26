@@ -56,7 +56,9 @@ describe("ExaminationService (unit, mocked Prisma)", () => {
   describe("findOne", () => {
     it("throws when the exam does not exist", async () => {
       prisma.exam.findUnique.mockResolvedValue(null);
-      await expect(service.findOne("missing")).rejects.toThrow("Sənəd tapılmadı");
+      await expect(service.findOne("missing")).rejects.toThrow(
+        "Sənəd tapılmadı",
+      );
     });
 
     it("returns sessions for an existing exam", async () => {
@@ -186,9 +188,24 @@ describe("ExaminationService (unit, mocked Prisma)", () => {
     });
   });
 
+  it("rejects publishing an unpriced exam through either update or publish", async () => {
+    prisma.exam.findUnique.mockResolvedValue({
+      id: "exam-1",
+      status: "DRAFT",
+      price: null,
+    });
+    await expect(service.publish("exam-1", "user-1")).rejects.toThrow("qiymət");
+    await expect(
+      service.update("exam-1", { status: "PUBLISHED" }),
+    ).rejects.toThrow("qiymət");
+  });
+
   describe("publish", () => {
     it("rejects publishing a non-draft exam", async () => {
-      prisma.exam.findUnique.mockResolvedValue({ id: "exam-1", status: "PUBLISHED" });
+      prisma.exam.findUnique.mockResolvedValue({
+        id: "exam-1",
+        status: "PUBLISHED",
+      });
 
       await expect(service.publish("exam-1", "user-1")).rejects.toThrow();
     });
