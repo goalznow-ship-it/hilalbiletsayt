@@ -9,6 +9,7 @@ import { ExaminationModule } from "./examination/examination.module";
 import { CandidateModule } from "./candidate/candidate.module";
 import { RegistrationModule } from "./registration/registration.module";
 import { TicketModule } from "./ticket/ticket.module";
+import { QuestionModule } from "./question/question.module";
 import { validateEnv } from "./config/env.validation";
 import { OmrModule } from "./omr/omr.module";
 
@@ -24,6 +25,7 @@ import { OmrModule } from "./omr/omr.module";
     CandidateModule,
     RegistrationModule,
     TicketModule,
+    QuestionModule,
     OmrModule,
   ],
 })

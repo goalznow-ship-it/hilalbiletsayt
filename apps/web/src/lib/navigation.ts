@@ -8,6 +8,7 @@ import {
   ListChecks,
   ChartNoAxesCombined,
   Settings2,
+  FileText,
 } from "lucide-react";
 
 export const navigation = [
@@ -15,6 +16,7 @@ export const navigation = [
   { href: "/dashboard/branches", label: "Filiallar", icon: Building2 },
   { href: "/dashboard/users", label: "İşçilər və satıcılar", icon: UsersRound },
   { href: "/dashboard/exams", label: "İmtahanlar", icon: GraduationCap },
+  { href: "/dashboard/questions", label: "Sual bankı", icon: FileText },
   { href: "/examinations", label: "Bilet kassası", icon: Ticket },
   { href: "/dashboard/tickets", label: "Bilet satışı", icon: Ticket },
   { href: "/dashboard/omr", label: "OMR skan", icon: ScanLine },

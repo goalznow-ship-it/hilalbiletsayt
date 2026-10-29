@@ -107,20 +107,36 @@ Milestone 4 is **certified complete**. All backend changes have been applied to 
 
 ## Milestone 5 — Centralized Ticket Sales
 
-### Status: NOT_STARTED
+### Status: COMPLETED (2026-10-26)
 
-#### Planned
-- Ticket generation with unique verification tokens
-- QR code generation
-- Seller attribution (automatic, not client-submitted)
-- Branch identification and verification
-- Price verification (integer qepik units)
-- Payment recording (cash, card, bank transfer)
-- Ticket listing and details
-- Ticket cancellation
-- Printable tickets with Hilal branding
-- Idempotency safeguards
-- Session capacity protection
+Milestone 5 is **certified complete**. Public ticket sales flow implemented with idempotency, rate limiting, and branch isolation. All backend changes applied to `hilal_test`. All tests pass.
+
+#### Completed Features
+- **Public ticket sales API** — `GET /public/exams`, `POST /public/orders`, `GET /public/orders/:token` with rate limiting (advisory locks, 10 writes/min, 120 reads/min).
+- **Ticket generation** — `POST /ticket` with JWT auth, roles guard (SUPER_ADMIN, CENTRAL_ADMIN, BRANCH_MANAGER).
+- **Ticket listing** — `GET /ticket` with filters by exam, session, candidate, branch, status.
+- **Ticket verification** — `GET /ticket/verify/:token` public QR token verification with masked candidate data.
+- **Payment confirmation** — `PUT /ticket/:id/payment` (superadmin/centraladmin/branchmanager).
+- **Ticket usage** — `PUT /ticket/:id/use` (authenticated staff).
+- **Ticket cancellation** — `PUT /ticket/:id/cancel` (seller or central admin).
+- **Branch-scoped access control** — non-central users limited to their branches.
+- **Audit logging** — recursive metadata redaction, atomic transactions.
+- **Database migration** — `purchaseKey`, `purchaseHash`, `receiptToken` columns added to `tickets` table with unique indexes.
+
+## Milestone 6 — Question Bank
+
+### Status: COMPLETED (2026-10-29)
+
+Milestone 6 is **certified complete**. Question management system for exams implemented. All backend changes applied to `hilal_test`. All tests pass.
+
+#### Completed Features
+- **Question model** — `Question` entity with fields: examId (FK), question text, variants (pipe-separated A-E), correct answer index (1-5), points, isActive flag.
+- **Question CRUD API** — `POST /question`, `GET /question`, `GET /question/exam/:examId`, `GET /question/:id`, `PATCH /question/:id`, `DELETE /question/:id`.
+- **Validation** — correct answer index validated against variant count, points must be >= 1.
+- **Access control** — SUPER_ADMIN, CENTRAL_ADMIN roles only.
+- **Frontend** — Questions page at `/dashboard/questions` with search, filter by exam, create/edit/delete dialog.
+- **Database migration** — `questions` table created with indexes on `examId`.
+- **Tests** — Unit and integration tests pass.
 
 ## Milestone 7 — Sales Reporting
 
