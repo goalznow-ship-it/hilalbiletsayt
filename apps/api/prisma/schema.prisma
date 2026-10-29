@@ -91,8 +91,29 @@ model Exam {
   sessions      ExamSession[]
   registrations ExaminationRegistration[]
   tickets       Ticket[]
+  questions     Question[]
+  omrKeys       OmrAnswerKey[]
+  omrUploads    OmrUpload[]
 
   @@map("exams")
+}
+
+model Question {
+  id          String   @id @default(uuid()) @db.Uuid
+  examId      String   @db.Uuid
+  question    String
+  /// Variantlar A-E formatında saxlanyar, "|" ilə ajratılır
+  variants    String   /// "A) cavab1|B) cavab2|C) cavab3|D) cavab4|E) cavab5"
+  correct     Int      /// 1-indexli düzgün cavab nömrəsi (1-5)
+  points      Int      @default(1)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  exam        Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@index([examId])
+  @@map("questions")
 }
 
 model ExamSession {
@@ -201,6 +222,7 @@ model Ticket {
   candidate   Candidate? @relation(fields: [candidateId], references: [id])
   branch      Branch?    @relation(fields: [branchId], references: [id])
   seller      User?      @relation(fields: [sellerId], references: [id])
+  omrSheet    OmrSheet?
 
   @@index([examId])
   @@index([sessionId])
@@ -210,4 +232,71 @@ model Ticket {
   @@index([status])
   @@index([paymentStatus])
   @@map("tickets")
+}
+
+model OmrAnswerKey {
+  id          String   @id @default(uuid()) @db.Uuid
+  examId      String   @db.Uuid
+  variant     String
+  version     Int
+  choiceCount Int
+  /// Ordered, immutable snapshots of existing Question IDs, correct choices and points.
+  answers     Json
+  scoring     Json
+  digest      String
+  createdAt   DateTime @default(now())
+  exam        Exam     @relation(fields: [examId], references: [id], onDelete: Restrict)
+  sheets      OmrSheet[]
+  @@unique([examId, variant, version])
+  @@map("omr_answer_keys")
+}
+
+model OmrSheet {
+  id              String   @id @default(uuid()) @db.Uuid
+  token           String   @unique
+  ticketId        String   @unique @db.Uuid
+  answerKeyId     String   @db.Uuid
+  /// Identity at issue time; changed ticket associations must go to review.
+  candidateId     String   @db.Uuid
+  examId          String   @db.Uuid
+  branchId        String   @db.Uuid
+  templateVersion String   @default("hilal-a4-v1")
+  createdAt       DateTime @default(now())
+  ticket          Ticket   @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  answerKey       OmrAnswerKey @relation(fields: [answerKeyId], references: [id], onDelete: Restrict)
+  result          OmrPage?
+  @@map("omr_sheets")
+}
+
+model OmrUpload {
+  id          String   @id @default(uuid()) @db.Uuid
+  examId      String   @db.Uuid
+  createdBy   String   @db.Uuid
+  sha256      String
+  size        Int
+  mime        String
+  status      String   @default("PENDING")
+  attemptId   String?  @db.Uuid
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+  exam        Exam     @relation(fields: [examId], references: [id], onDelete: Restrict)
+  pages       OmrPage[]
+  @@unique([examId, createdBy, sha256])
+  @@index([createdBy, createdAt])
+  @@map("omr_uploads")
+}
+
+model OmrPage {
+  id          String   @id @default(uuid()) @db.Uuid
+  uploadId    String   @db.Uuid
+  pageIndex   Int
+  sheetId     String?  @unique @db.Uuid
+  status      String
+  data        Json
+  createdAt   DateTime @default(now())
+  upload      OmrUpload @relation(fields: [uploadId], references: [id], onDelete: Restrict)
+  sheet       OmrSheet? @relation(fields: [sheetId], references: [id], onDelete: Restrict)
+  @@unique([uploadId, pageIndex])
+  @@map("omr_pages")
 }

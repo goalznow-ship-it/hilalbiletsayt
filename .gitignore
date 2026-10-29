@@ -15,4 +15,5 @@ __pycache__
 .venv
 venv
 .pytest_cache
+var/omr/
 .DS_Store
