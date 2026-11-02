@@ -1,4 +1,5 @@
 "use client";
+import { useEffect } from "react";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -20,7 +21,10 @@ import { useSession } from "@/components/session-provider";
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const { user, selectedBranch, selectBranch } = useSession();
+  const { user: sessionUser, selectedBranch, selectBranch } = useSession();
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => { setHydrated(true); }, []);
+  const user = hydrated ? sessionUser : null;
   if (
     pathname === "/" ||
     pathname.startsWith("/orders/") ||

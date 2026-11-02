@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useState,
+  useSyncExternalStore,
 } from "react";
 
 import { authenticatedRequest } from "@/lib/request";
@@ -50,6 +51,8 @@ type Session = {
   signIn: (email: string, password: string) => Promise<void>;
   clearSession: () => void;
   request: <T>(path: string, init?: RequestInit) => Promise<T>;
+  downloadPdf: (path: string) => Promise<Blob>;
+  downloadFile: (path: string, mimeType: string) => Promise<Blob>;
 };
 
 const SessionContext = createContext<Session | null>(null);
@@ -133,6 +136,59 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     [token, clearSession],
   );
 
+
+  const downloadPdf = useCallback(
+    async (path: string): Promise<Blob> => {
+      if (!token) throw new Error("Hesabınıza daxil olun.");
+
+      const endpoint = path.startsWith("/api/")
+        ? path
+        : `/api/${path.startsWith("/") ? path.slice(1) : path}`;
+
+      const response = await fetch(endpoint, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+
+      if (response.status === 401) {
+        clearSession();
+        throw new Error("Sessiyanın müddəti bitib.");
+      }
+
+      if (!response.ok) {
+        throw new Error(`PDF alınmadı: HTTP ${response.status}`);
+      }
+
+      const type = response.headers.get("content-type") ?? "";
+      if (!type.toLowerCase().includes("application/pdf")) {
+        throw new Error("Server düzgün PDF qaytarmadı.");
+      }
+
+      return response.blob();
+    },
+    [token, clearSession],
+  );
+
+  const downloadFile = useCallback(
+    async (path: string, mimeType: string): Promise<Blob> => {
+      if (!token) throw new Error("Hesabınıza daxil olun.");
+      if (!path.startsWith("/omr/exams/") ||
+          !["text/csv", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/pdf"].includes(mimeType))
+        throw new Error("İxrac ünvanı düzgün deyil.");
+      const response = await fetch(`/api${path}`, {
+        cache: "no-store", headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.status === 401) {
+        clearSession();
+        throw new Error("Sessiyanın müddəti bitib.");
+      }
+      if (!response.ok) throw new Error(`İxrac alınmadı: HTTP ${response.status}`);
+      if (!(response.headers.get("content-type") ?? "").toLowerCase().startsWith(mimeType))
+        throw new Error("Server gözlənilən fayl formatını qaytarmadı.");
+      return response.blob();
+    }, [token, clearSession],
+  );
+
   const signIn = async (email: string, password: string) => {
     const session = await authenticate(email, password);
     setToken(session.token);
@@ -157,6 +213,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         signIn,
         clearSession,
         request,
+        downloadPdf,
+        downloadFile,
       }}
     >
       {children}
@@ -164,8 +222,29 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+const subscribeHydration = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
+
 export function useSession() {
   const context = useContext(SessionContext);
+
+  const hydrationReady = useSyncExternalStore(
+    subscribeHydration,
+    getClientSnapshot,
+    getServerSnapshot,
+  );
+
   if (!context) throw new Error("SessionProvider is required");
+
+  if (!hydrationReady) {
+    return {
+      ...context,
+      user: null,
+      selectedBranch: "",
+      initializing: true,
+    };
+  }
+
   return context;
 }

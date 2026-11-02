@@ -6,7 +6,9 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { AuthenticatedUser, isCentralAdmin } from "../auth/authorization";
-import { issueSchema, keySchema, KeyAnswer, Rules, ReadPage, scorePage, workerResultSchema } from "./omr.contract";
+import { issueSchema, keySchema, reviewSchema, pageSchema, KeyAnswer, Rules, ReadPage, scorePage, workerResultSchema } from "./omr.contract";
+import { omrXlsx } from "./omr.xlsx";
+import { omrResultsPdf } from "./omr.pdf";
 
 export type ScanFile = { buffer: Buffer; originalname: string; mimetype: string; size: number };
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
@@ -53,6 +55,8 @@ export class OmrService {
     const parsed = keySchema.safeParse(input);
     if (!parsed.success) throw new BadRequestException("Cavab açarı və bal qaydalarını yoxlayın.");
     const data = parsed.data;
+    if (data.templateVersionId)
+      throw new BadRequestException("Bu versiyada ayrıca şablon ID-si dəstəklənmir; hilal-a4-v1 istifadə olunur.");
     return this.prisma.$transaction(async tx => {
       await tx.$queryRawUnsafe("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))::text", `omr-key:${data.examId}:${data.variant}`);
       const questions = await tx.question.findMany({ where: { id: { in: data.questionIds }, examId: data.examId, isActive: true } });
@@ -112,10 +116,187 @@ export class OmrService {
   }
 
   async getUpload(id: string, user: AuthenticatedUser) {
-    const upload = await this.prisma.omrUpload.findUnique({ where: { id }, include: { pages: { orderBy: { pageIndex: "asc" } } } });
+    const upload = await this.prisma.omrUpload.findUnique({
+      where: { id },
+      include: { pages: {
+        orderBy: { pageIndex: "asc" },
+        include: { sheet: { select: { branchId: true } } },
+      } },
+    });
     if (!upload) throw new NotFoundException();
-    if (!isCentralAdmin(user) && upload.createdBy !== user.userId) throw new ForbiddenException();
-    return upload;
+    if (!isCentralAdmin(user)) {
+      if (upload.createdBy !== user.userId) throw new ForbiddenException();
+      // Fail closed if a scan is not attributable to an authorized branch.
+      if (upload.pages.length === 0 || upload.pages.some(page =>
+        !page.sheet || !this.branchAllowed(user, page.sheet.branchId)
+      )) throw new ForbiddenException("Bu yükləmənin filialına icazəniz yoxdur.");
+    }
+    // Do not change the existing response shape by returning sheet metadata.
+    return { ...upload, pages: upload.pages.map(({ sheet, ...page }) => page) };
+  }
+
+  async listKeys(examId: string, user: AuthenticatedUser) {
+    // Answer contents are intentionally not exposed to branch users.
+    const exam = await this.prisma.exam.findUnique({ where: { id: examId }, select: { id: true } });
+    if (!exam) throw new NotFoundException("İmtahan tapılmadı.");
+    if (!isCentralAdmin(user) && !(user.branches ?? []).some(b => this.branchAllowed(user, b.id)))
+      throw new ForbiddenException();
+    const keys = await this.prisma.omrAnswerKey.findMany({
+      where: { examId }, orderBy: [{ variant: "asc" }, { version: "desc" }],
+      select: { id: true, examId: true, variant: true, version: true, choiceCount: true,
+        createdAt: true, answers: true },
+      take: 100,
+    });
+    return keys.map(key => ({
+      id: key.id, examId: key.examId, variant: key.variant,
+      version: key.version, choiceCount: key.choiceCount, createdAt: key.createdAt,
+      questionCount: Array.isArray(key.answers) ? key.answers.length : 0,
+    }));
+  }
+
+  async listUploads(examId: string, user: AuthenticatedUser) {
+    if (!await this.prisma.exam.findUnique({ where: { id: examId }, select: { id: true } }))
+      throw new NotFoundException("İmtahan tapılmadı.");
+    const candidateBranchIds = user.userBranchRoles
+      ? user.userBranchRoles.map(entry => entry.branchId)
+      : (user.branches ?? []).map(branch => branch.id);
+    const allowedBranchIds = [...new Set(candidateBranchIds.filter(id => this.branchAllowed(user, id)))];
+    const uploads = await this.prisma.omrUpload.findMany({
+      where: { examId, ...(isCentralAdmin(user) ? {} : {
+        createdBy: user.userId,
+        // The upload must have only pages belonging to currently allowed branches.
+        pages: {
+          some: { sheet: { is: { branchId: { in: allowedBranchIds } } } },
+          every: { sheet: { is: { branchId: { in: allowedBranchIds } } } },
+        },
+      }) },
+      select: { id: true, examId: true, status: true, createdAt: true, updatedAt: true,
+        error: true, _count: { select: { pages: true } } },
+      orderBy: { createdAt: "desc" }, take: 100,
+    });
+    return uploads.map(({ _count, ...row }) => ({ ...row, pageCount: _count.pages }));
+  }
+
+  private async resultRows(examId: string, user: AuthenticatedUser): Promise<Array<Array<string | number>>> {
+    if (!await this.prisma.exam.findUnique({ where: { id: examId }, select: { id: true } }))
+      throw new NotFoundException("İmtahan tapılmadı.");
+    const pages = await this.prisma.omrPage.findMany({
+      where: { upload: { examId, ...(isCentralAdmin(user) ? {} : { createdBy: user.userId }) },
+        sheetId: { not: null }, status: "COMPLETED" },
+      include: { upload: { select: { createdBy: true } },
+        sheet: { select: { branchId: true, ticketId: true, candidateId: true,
+          answerKey: { select: { variant: true } } } } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 5000,
+    });
+    const rows: Array<Array<string | number>> = [["page_id", "upload_id", "ticket_id", "candidate_id", "branch_id",
+      "variant", "score", "maximum_score", "status"]];
+    for (const page of pages) {
+      if (!page.sheet || !this.branchAllowed(user, page.sheet.branchId)) continue;
+      const data = page.data && typeof page.data === "object" && !Array.isArray(page.data)
+        ? page.data as Record<string, unknown> : {};
+      if (typeof data.score !== "number" || typeof data.maximumScore !== "number") continue;
+      rows.push([page.id, page.uploadId, page.sheet.ticketId, page.sheet.candidateId,
+        page.sheet.branchId, page.sheet.answerKey.variant, data.score,
+        data.maximumScore, page.status]);
+    }
+    return rows;
+  }
+
+  async exportCsv(examId: string, user: AuthenticatedUser): Promise<Buffer> {
+    const rows = await this.resultRows(examId, user);
+    const csvField = (value: string | number): string => {
+      const str = String(value);
+      // Excel formula injection defense.
+      const safe = /^[=+\-@\t\r]/.test(str) ? "'" + str : str;
+      return '"' + safe.replace(/"/g, '""') + '"';
+    };
+    return Buffer.from("\uFEFF" + rows.map(row => row.map(csvField).join(",")).join("\r\n") + "\r\n", "utf8");
+  }
+
+  async exportXlsx(examId: string, user: AuthenticatedUser): Promise<Buffer> {
+    return omrXlsx(await this.resultRows(examId, user));
+  }
+
+  async exportPdf(examId: string, user: AuthenticatedUser): Promise<Buffer> {
+    return omrResultsPdf(await this.resultRows(examId, user));
+  }
+
+  async reviewPage(uploadId: string, pageId: string, input: unknown, user: AuthenticatedUser) {
+    const parsed = reviewSchema.safeParse(input);
+    if (!parsed.success) throw new BadRequestException("Düzəliş və izah məlumatları düzgün deyil.");
+    return this.prisma.$transaction(async tx => {
+      // Locks ensure concurrent reviewers cannot both finalize the same page.
+      await tx.$queryRaw`SELECT "id" FROM "omr_pages" WHERE "id" = ${pageId}::uuid FOR UPDATE`;
+      const page = await tx.omrPage.findUnique({ where: { id: pageId }, include: {
+        upload: true, sheet: { include: { answerKey: true, ticket: true } },
+      } });
+      if (!page || page.uploadId !== uploadId) throw new NotFoundException("Səhifə tapılmadı.");
+      if (!isCentralAdmin(user) && page.upload.createdBy !== user.userId)
+        throw new ForbiddenException("Yalnız öz yükləmələrinizi yoxlaya bilərsiniz.");
+      if (page.status !== "REVIEW" || page.upload.status !== "REVIEW")
+        throw new ConflictException("Bu səhifə artıq yoxlanılıb və ya emal vəziyyəti dəyişib.");
+      const sheet = page.sheet;
+      if (!sheet) throw new ConflictException("Vərəqin QR identifikatoru təsdiqlənməyib. Avtomatik finalizasiya qadağandır.");
+      this.assertBranch(user, sheet.branchId);
+      if (sheet.examId !== page.upload.examId || sheet.examId !== sheet.ticket.examId ||
+          sheet.candidateId !== sheet.ticket.candidateId || sheet.branchId !== sheet.ticket.branchId ||
+          sheet.answerKey.examId !== sheet.examId || sheet.ticket.status === "CANCELLED" ||
+          (sheet.ticket.price > 0 && sheet.ticket.paymentStatus !== "PAID"))
+        throw new ConflictException("Bilet və namizəd məlumatları dəyişib.");
+      const raw = page.data;
+      if (!raw || typeof raw !== "object" || Array.isArray(raw))
+        throw new ConflictException("Tanınma məlumatları mövcud deyil.");
+      const saved = raw as Record<string, unknown>;
+      if (!Array.isArray(saved.answers)) throw new ConflictException("Cavablar mövcud deyil.");
+      const initial = pageSchema.safeParse({ ...saved, pageIndex: page.pageIndex, sheetToken: null });
+      if (!initial.success) throw new ConflictException("Skan məlumatlarının formatı düzgün deyil.");
+      if (sheet.templateVersion !== initial.data.templateVersion)
+        throw new ConflictException("Vərəq şablonunun versiyası uyğun deyil.");
+      const answerCount = initial.data.answers.length;
+      const choices = sheet.answerKey.choiceCount;
+      const answers = initial.data.answers.map(a => ({ ...a, marked: [...a.marked], fillRatios: [...a.fillRatios] }));
+      const changed = new Set<number>();
+      for (const item of parsed.data.changes) {
+        if (item.question > answerCount) throw new BadRequestException("Sual nömrəsi həddən artıqdır.");
+        if (item.selected && "ABCDE".indexOf(item.selected) >= choices)
+          throw new BadRequestException("Seçilmiş variant bu şablona uyğun deyil.");
+        const target = answers[item.question - 1];
+        if (target.question !== item.question) throw new ConflictException("Sual sırası dəyişib.");
+        target.state = item.selected ? "MARKED" : "BLANK";
+        target.selected = item.selected;
+        target.marked = item.selected ? [item.selected] : [];
+        target.confidence = 1; // human verified, source ratios are preserved in audit data
+        changed.add(item.question);
+      }
+      if (answers.some(a => a.state === "UNCERTAIN" || a.state === "MULTIPLE" || a.confidence < .85))
+        throw new BadRequestException("Bütün qeyri-müəyyən cavablar yoxlanılmalıdır.");
+      const verified: ReadPage = { ...initial.data, status: "READ", reviewFlags: [], answers };
+      let scored: ReturnType<typeof scorePage>;
+      try {
+        scored = scorePage(verified, sheet.answerKey.answers as KeyAnswer[],
+          sheet.answerKey.scoring as Rules, choices);
+      } catch {
+        throw new ConflictException("Cavab açarı və skan şablonu uyğun deyil.");
+      }
+      if (scored.score === null) throw new ConflictException("Nəticə hələ təsdiqlənə bilmir.");
+      const identity = { sheetId: sheet.id, ticketId: sheet.ticketId,
+        candidateId: sheet.candidateId, examId: sheet.examId,
+        answerKeyId: sheet.answerKeyId, keyVersion: sheet.answerKey.version,
+        keyDigest: sheet.answerKey.digest, variant: sheet.answerKey.variant };
+      const revised = {
+        ...saved, answers, ...scored, identity, status: "READ", reviewFlags: [],
+        recognizedAnswers: saved.recognizedAnswers ?? initial.data.answers,
+        manualReview: { reviewedBy: user.userId, reviewedAt: new Date().toISOString(),
+          note: parsed.data.note, questions: [...changed].sort((a,b) => a - b) },
+      };
+      await tx.omrPage.update({ where: { id: page.id }, data: { status: "COMPLETED", data: json(revised) } });
+      const pending = await tx.omrPage.count({ where: { uploadId, status: { not: "COMPLETED" } } });
+      if (pending === 0) await tx.omrUpload.update({ where: { id: uploadId }, data: { status: "COMPLETED", error: null } });
+      await this.audit.log("OMR_PAGE_MANUAL_REVIEW", user.userId, "OmrPage", page.id,
+        { uploadId, questions: [...changed], noteLength: parsed.data.note.length }, tx);
+      return { id: page.id, uploadId, status: "COMPLETED", score: scored.score,
+        maximumScore: scored.maximumScore, uploadStatus: pending === 0 ? "COMPLETED" : "REVIEW" };
+    });
   }
 
   async original(id: string, user: AuthenticatedUser) {

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Header, Param, ParseUUIDPipe, Post, StreamableFile, UploadedFiles, UseGuards, UseInterceptors } from "@nestjs/common";
+import { Body, Controller, Get, Header, Param, ParseUUIDPipe, Patch, Post, Query, StreamableFile, UploadedFiles, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FilesInterceptor } from "@nestjs/platform-express";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { Roles, RolesGuard } from "../auth/guards/roles.guard";
@@ -14,6 +14,47 @@ export class OmrController {
   @Post("keys")
   @Roles(["SUPER_ADMIN", "CENTRAL_ADMIN"])
   createKey(@Body() data: unknown, @CurrentUser() user: AuthenticatedUser) { return this.omr.createKey(data, user); }
+
+  @Get("keys")
+  keys(@Query("examId", ParseUUIDPipe) examId: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.omr.listKeys(examId, user);
+  }
+
+  @Get("exams/:examId/uploads")
+  uploads(@Param("examId", ParseUUIDPipe) examId: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.omr.listUploads(examId, user);
+  }
+
+  @Get("exams/:examId/results.csv")
+  @Header("Cache-Control", "no-store")
+  async csv(@Param("examId", ParseUUIDPipe) examId: string, @CurrentUser() user: AuthenticatedUser) {
+    const data = await this.omr.exportCsv(examId, user);
+    return new StreamableFile(data, { type: "text/csv; charset=utf-8",
+      disposition: 'attachment; filename="omr-results.csv"' });
+  }
+
+  @Get("exams/:examId/results.pdf")
+  @Header("Cache-Control", "no-store")
+  async resultsPdf(@Param("examId", ParseUUIDPipe) examId: string, @CurrentUser() user: AuthenticatedUser) {
+    return new StreamableFile(await this.omr.exportPdf(examId, user), { type: "application/pdf",
+      disposition: 'attachment; filename="omr-results.pdf"' });
+  }
+
+  @Get("exams/:examId/results.xlsx")
+  @Header("Cache-Control", "no-store")
+  async xlsx(@Param("examId", ParseUUIDPipe) examId: string, @CurrentUser() user: AuthenticatedUser) {
+    const data = await this.omr.exportXlsx(examId, user);
+    return new StreamableFile(data, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      disposition: 'attachment; filename="omr-results.xlsx"' });
+  }
+
+  @Patch("uploads/:uploadId/pages/:pageId/review")
+  @Roles(["SUPER_ADMIN", "CENTRAL_ADMIN", "BRANCH_MANAGER", "OMR_OPERATOR"])
+  review(@Param("uploadId", ParseUUIDPipe) uploadId: string,
+    @Param("pageId", ParseUUIDPipe) pageId: string,
+    @Body() data: unknown, @CurrentUser() user: AuthenticatedUser) {
+    return this.omr.reviewPage(uploadId, pageId, data, user);
+  }
 
   @Post("sheets")
   issue(@Body() data: unknown, @CurrentUser() user: AuthenticatedUser) { return this.omr.issue(data, user); }

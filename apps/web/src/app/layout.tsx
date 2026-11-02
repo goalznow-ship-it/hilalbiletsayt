@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import "./globals.css";
 import { AppShell } from "@/components/app-shell";
@@ -15,7 +16,9 @@ export default function RootLayout({
     <html lang="az">
       <body>
         <SessionProvider>
-          <AppShell>{children}</AppShell>
+          <Suspense fallback={<div role="status">Səhifə yüklənir...</div>}>
+            <AppShell>{children}</AppShell>
+          </Suspense>
         </SessionProvider>
       </body>
     </html>

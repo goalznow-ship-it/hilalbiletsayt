@@ -16,7 +16,11 @@ export async function authenticatedRequest<T>(
   if (!token)
     throw new ApiError(401, "Davam etmək üçün hesabınıza daxil olun.");
   const headers = new Headers(init?.headers);
-  headers.set("Content-Type", "application/json");
+  if (init?.body instanceof FormData) {
+    headers.delete("Content-Type");
+  } else {
+    headers.set("Content-Type", "application/json");
+  }
   headers.set("Authorization", `Bearer ${token}`);
   let response: Response;
   try {

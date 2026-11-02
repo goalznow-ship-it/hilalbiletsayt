@@ -9,6 +9,7 @@ export const keySchema = z.object({
   examId: z.uuid(), variant: z.string().regex(/^[A-Z0-9_-]{1,16}$/),
   questionIds: z.array(z.uuid()).min(1).max(150).refine(ids => new Set(ids).size === ids.length),
   choiceCount: z.number().int().min(2).max(5), scoring: scoringSchema,
+  templateVersionId: z.uuid().optional(),
 }).strict();
 export const issueSchema = z.object({ ticketId: z.uuid(), answerKeyId: z.uuid() }).strict();
 export const answerSchema = z.object({
@@ -17,6 +18,30 @@ export const answerSchema = z.object({
   marked: z.array(z.enum(["A", "B", "C", "D", "E"])).max(5),
   confidence: z.number().min(0).max(1), fillRatios: z.array(z.number().min(0).max(1)).min(2).max(5),
 });
+export const correctionSchema = z.object({
+  note: z.string().optional(),
+  answers: z.array(answerSchema),
+  corrections: z.array(z.object({
+    question: z.number().int().min(1).max(150),
+    state: z.enum(["MARKED", "BLANK", "MULTIPLE", "UNCERTAIN"]),
+    selected: z.enum(["A", "B", "C", "D", "E"]).nullable(),
+    marked: z.array(z.enum(["A", "B", "C", "D", "E"])).max(5),
+    recognizedAnswer: z.string().optional(),
+    row: z.number().int().min(1).max(3).optional(),
+    fieldId: z.string().optional(),
+    answerType: z.enum(["single", "integer", "letters"]).optional(),
+  })).max(500).optional(),
+});
+// Human review may change only answer selections, never identity or scoring rules.
+export const reviewSchema = z.object({
+  note: z.string().trim().min(5).max(500),
+  changes: z.array(z.object({
+    question: z.number().int().min(1).max(150),
+    selected: z.enum(["A", "B", "C", "D", "E"]).nullable(),
+  }).strict()).min(1).max(150).refine(items =>
+    new Set(items.map(item => item.question)).size === items.length),
+}).strict();
+
 export const pageSchema = z.object({
   pageIndex: z.number().int().min(0).max(9), engineVersion: z.literal("1.0.0"),
   templateVersion: z.literal("hilal-a4-v1"), sheetToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable(),
