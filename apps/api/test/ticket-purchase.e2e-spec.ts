@@ -103,11 +103,18 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  await prisma.ticket.deleteMany();
-  await prisma.examinationRegistration.deleteMany();
-  await prisma.examSession.deleteMany();
-  await prisma.exam.deleteMany();
-  await prisma.candidate.deleteMany();
+  // Delete OMR dependents before their referenced records.
+  await prisma.$transaction(async (tx) => {
+    await tx.omrPage.deleteMany();
+    await tx.omrSheet.deleteMany();
+    await tx.omrUpload.deleteMany();
+    await tx.omrAnswerKey.deleteMany();
+    await tx.ticket.deleteMany();
+    await tx.examinationRegistration.deleteMany();
+    await tx.examSession.deleteMany();
+    await tx.exam.deleteMany();
+    await tx.candidate.deleteMany();
+  });
 
   branchA = await prisma.branch.upsert({
     where: { code: "TEST-BRANCH-A" },
@@ -371,8 +378,19 @@ describe("Ticket purchase integration (real PostgreSQL test database)", () => {
       admin,
     );
 
+    const pending = await ticketService.verifyByToken(ticket.qrCode);
+
+    expect(pending.valid).toBe(false);
+    expect(pending.paymentRequired).toBe(true);
+    expect(pending.paymentStatus).toBe("PENDING");
+
+    await ticketService.confirmPayment(ticket.id, admin);
+
     const verified = await ticketService.verifyByToken(ticket.qrCode);
+
     expect(verified.valid).toBe(true);
+    expect(verified.paymentRequired).toBe(true);
+    expect(verified.paymentStatus).toBe("PAID");
     expect(verified.examTitle).toBe("Bilet imtahanı");
     expect(verified.candidateNameMasked).toBe("A**** M********");
     expect(verified).not.toHaveProperty("candidateFullName");

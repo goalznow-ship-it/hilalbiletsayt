@@ -18,6 +18,7 @@ type Verification = {
   usedAt: string | null;
   candidateNameMasked: string | null;
   paymentStatus: string;
+  paymentRequired: boolean;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -25,6 +26,18 @@ const STATUS_LABELS: Record<string, string> = {
   USED: "Artıq istifadə edilib",
   CANCELLED: "Ləğv edilib",
 };
+
+function getVerificationStatusLabel(result: Verification) {
+  if (result.status === "ACTIVE" && !result.valid) {
+    if (result.paymentStatus === "REFUNDED")
+      return "Ödəniş geri qaytarılıb";
+    if (result.paymentRequired)
+      return "Ödəniş təsdiqlənməyib";
+    return "Bilet giriş üçün etibarlı deyil";
+  }
+
+  return STATUS_LABELS[result.status] ?? result.status;
+}
 
 function formatDateTime(value?: string | null) {
   if (!value) return "—";
@@ -129,11 +142,8 @@ export default function VerifyTicket({ token }: { token: string }) {
                 }`}
               >
                 <p className="text-lg font-medium">
-                  {STATUS_LABELS[result.status] ?? result.status}
+                  {getVerificationStatusLabel(result)}
                 </p>
-                {!result.valid && result.status === "ACTIVE" && (
-                  <p className="text-xs">Bilet aktiv deyil.</p>
-                )}
               </div>
 
               <dl className="mt-5 space-y-3 text-sm">
@@ -192,9 +202,13 @@ export default function VerifyTicket({ token }: { token: string }) {
             {result && (
               <p>
                 Ödəniş:{" "}
-                {result.paymentStatus === "PAID"
-                  ? "Ödənilib"
-                  : "Ödəniş gözlənilir"}
+                {result.paymentStatus === "REFUNDED"
+                  ? "Geri qaytarılıb"
+                  : !result.paymentRequired
+                    ? "Ödəniş tələb olunmur"
+                    : result.paymentStatus === "PAID"
+                      ? "Ödənilib"
+                      : "Ödəniş gözlənilir"}
               </p>
             )}
             <Link href="/" className="text-sm text-primary">

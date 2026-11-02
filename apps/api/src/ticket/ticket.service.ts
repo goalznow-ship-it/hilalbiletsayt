@@ -8,6 +8,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { CreateTicketDto } from "./create-ticket.dto";
+import { isTicketValidForEntry } from "./ticket-verification";
 import { TicketQueryDto } from "./ticket-query.dto";
 import { resolvePagination, toPaginated } from "../common/pagination";
 import {
@@ -473,7 +474,8 @@ export class TicketService {
       : null;
 
     return {
-      valid: ticket.status === "ACTIVE",
+      valid: isTicketValidForEntry(ticket),
+      paymentRequired: ticket.price > 0,
       code: ticket.code,
       examCode: ticket.exam.code,
       examTitle: ticket.exam.title,
@@ -530,11 +532,17 @@ export class TicketService {
     }
 
     await this.assertTicketAccess(ticket, user);
-    if (ticket.paymentStatus !== "PAID" && ticket.price > 0)
-      throw new BadRequestException("Biletin ödənişi təsdiqlənməyib");
-    if (ticket.status !== "ACTIVE") {
+    if (!isTicketValidForEntry(ticket)) {
+      if (ticket.status !== "ACTIVE") {
+        throw new BadRequestException(
+          "Bu bilet artıq istifadə edilib və ya ləğv edilib",
+        );
+      }
+
       throw new BadRequestException(
-        "Bu bilet artıq istifadə edilib və ya ləğv edilib",
+        ticket.paymentStatus === "REFUNDED"
+          ? "Biletin ödənişi geri qaytarılıb"
+          : "Biletin ödənişi təsdiqlənməyib",
       );
     }
 
@@ -543,7 +551,10 @@ export class TicketService {
       where: {
         id: ticketId,
         status: "ACTIVE",
-        OR: [{ paymentStatus: "PAID" }, { price: 0 }],
+        OR: [
+          { paymentStatus: "PAID" },
+          { price: 0, paymentStatus: { in: ["PENDING", "PAID"] } },
+        ],
       },
       data: { status: "USED", usedAt: new Date(), usedBy: user.userId },
     });
