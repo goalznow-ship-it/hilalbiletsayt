@@ -1,10 +1,8 @@
 "use client";
-import { useEffect } from "react";
-
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Fragment, useState } from "react";
+import { Fragment, useState, useSyncExternalStore } from "react";
 import { ChevronDown, LogIn, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,12 +16,19 @@ import { navigation } from "@/lib/navigation";
 import { ProfileMenu } from "@/components/profile-menu";
 import { useSession } from "@/components/session-provider";
 
+const subscribeHydration = () => () => {};
+const getHydratedSnapshot = () => true;
+const getServerHydrationSnapshot = () => false;
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const { user: sessionUser, selectedBranch, selectBranch } = useSession();
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => { setHydrated(true); }, []);
+  const hydrated = useSyncExternalStore(
+    subscribeHydration,
+    getHydratedSnapshot,
+    getServerHydrationSnapshot,
+  );
   const user = hydrated ? sessionUser : null;
   if (
     pathname === "/" ||

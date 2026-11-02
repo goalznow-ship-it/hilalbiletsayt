@@ -25,7 +25,6 @@ export default function OmrResultsPage() {
   }, [request, user]);
 
   useEffect(() => {
-    setUploads([]);
     if (!UUID.test(examId) || !user) return;
     let active = true;
     request<Upload[]>(`/omr/exams/${examId}/uploads`).then(data => {
@@ -63,7 +62,11 @@ export default function OmrResultsPage() {
     <h1 className="text-2xl font-bold">Skan nəticələri və ixrac</h1>
     <p className="text-sm text-slate-500">İcazəniz olan yükləmələr göstərilir. İxrac yalnız təsdiqlənmiş səhifələri daxil edir (maksimum 5000).</p>
     <label className="block space-y-2 text-sm font-medium">İmtahan
-      <select value={examId} onChange={e => { setExamId(e.target.value); setError(""); }}
+      <select value={examId} onChange={e => {
+          setExamId(e.target.value);
+          setUploads([]);
+          setError("");
+        }}
         className="block w-full rounded-lg border border-slate-300 bg-white p-3">
         <option value="">İmtahan seçin</option>
         {exams.map(item => <option key={item.id} value={item.id}>{item.code} — {item.title}</option>)}

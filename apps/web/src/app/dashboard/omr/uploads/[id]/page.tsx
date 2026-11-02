@@ -33,8 +33,26 @@ export default function OmrUploadStatus() {
   }, [id, request, user]);
 
   useEffect(() => {
-    if (!initializing && user) void refresh();
-  }, [initializing, user, refresh]);
+    if (initializing || !user || !UUID.test(id)) return;
+
+    let active = true;
+
+    request<Upload>(`/omr/uploads/${id}`)
+      .then((data) => {
+        if (active) setUpload(data);
+      })
+      .catch((err: unknown) => {
+        if (active) {
+          setError(
+            err instanceof Error ? err.message : "Status alınmadı."
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [id, initializing, request, user]);
 
   async function originalPdf() {
     if (!UUID.test(id)) return;

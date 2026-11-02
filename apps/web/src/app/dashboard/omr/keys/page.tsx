@@ -35,17 +35,24 @@ export default function KeysPage() {
   }, [request, user]);
 
   useEffect(() => {
-    setKeys([]); setQuestions([]); setSelected([]);
     if (!examId || !user) return;
     let active = true;
-    void refresh(examId).catch(err => { if (active) setError(err instanceof Error ? err.message : "Açarlar alınmadı."); });
+    request<Key[]>(`/omr/keys?examId=${encodeURIComponent(examId)}`)
+      .then(data => {
+        if (active) setKeys(Array.isArray(data) ? data : []);
+      })
+      .catch(err => {
+        if (active) {
+          setError(err instanceof Error ? err.message : "Açarlar alınmadı.");
+        }
+      });
     if (central) {
       request<Question[]>(`/question/exam/${examId}`).then(items => {
         if (active) { const data = Array.isArray(items) ? items : []; setQuestions(data); setSelected(data.map(q => q.id)); }
       }).catch(err => { if (active) setError(err instanceof Error ? err.message : "Suallar alınmadı."); });
     }
     return () => { active = false; };
-  }, [examId, central, refresh, request, user]);
+  }, [examId, central, request, user]);
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(""); setInfo("");
@@ -79,7 +86,14 @@ export default function KeysPage() {
     <Link href="/dashboard/omr" className="text-sm text-[#7A0014]">OMR bölməsinə qayıt</Link>
     <h1 className="text-2xl font-bold">Cavab açarları</h1>
     <label className="block space-y-2 text-sm font-medium">İmtahan
-      <select value={examId} onChange={e => setExamId(e.target.value)} className="block w-full rounded-lg border border-slate-300 bg-white p-3">
+      <select value={examId} onChange={e => {
+        const nextId = e.target.value;
+        setExamId(nextId);
+        setKeys([]);
+        setQuestions([]);
+        setSelected([]);
+        setError("");
+      }} className="block w-full rounded-lg border border-slate-300 bg-white p-3">
         <option value="">İmtahan seçin</option>
         {exams.map(exam => <option key={exam.id} value={exam.id}>{exam.code} — {exam.title}</option>)}
       </select>

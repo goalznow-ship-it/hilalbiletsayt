@@ -65,10 +65,7 @@ export default function OmrUploadPage() {
   useEffect(() => {
     if (initializing) return;
 
-    if (!user) {
-      setLoading(false);
-      return;
-    }
+    if (!user) return;
 
     let active = true;
 
