@@ -582,46 +582,80 @@ export class TicketService {
   }
 
   async cancel(ticketId: string, user: AuthenticatedUser) {
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      // Fetch and validate the ticket inside the transaction with row lock
+      // This prevents concurrent cancellations from both seeing ACTIVE status
+      await tx.$queryRawUnsafe(
+        'SELECT "id" FROM "tickets" WHERE "id" = $1::uuid FOR UPDATE',
+        ticketId,
+      );
+      const ticket = await tx.ticket.findUnique({
+        where: { id: ticketId },
+      });
 
-    if (!ticket) {
-      throw new NotFoundException("Bilet tapılmadı");
-    }
+      if (!ticket) {
+        throw new NotFoundException("Bilet tapılmadı");
+      }
 
-    if (ticket.status !== "ACTIVE") {
-      throw new BadRequestException("Aktiv bilet yoxdur");
-    }
+      // Preserve existing authorization rules
+      if (ticket.sellerId !== user.userId && !isCentralAdmin(user)) {
+        throw new ForbiddenException("Bilet ləğv edə bilməzsiniz");
+      }
 
-    // Only seller or central admin can cancel
-    if (ticket.sellerId !== user.userId && !isCentralAdmin(user)) {
-      throw new ForbiddenException("Bilet ləğv edə bilməzsiniz");
-    }
+      // Check if ticket is ACTIVE (preserves existing behavior)
+      // This handles USED/CANCELLED tickets with BadRequestException
+      if (ticket.status !== "ACTIVE") {
+        throw new BadRequestException("Aktiv bilet yoxdur");
+      }
 
-    const cancelled = await this.prisma.ticket.updateMany({
-      where: { id: ticketId, status: "ACTIVE" },
-      data: { status: "CANCELLED" },
-    });
-    if (!cancelled.count)
-      throw new ConflictException("Bilet statusu dəyişib. Yenidən yoxlayın");
-    const updated = await this.prisma.ticket.findUniqueOrThrow({
-      where: { id: ticketId },
-      include: {
-        exam: { select: { id: true, code: true, title: true } },
-        session: { select: { id: true, sessionCode: true } },
-        candidate: {
-          select: { id: true, candidate_number: true, full_name: true },
+      // Conditional updateMany with status: "ACTIVE" to prevent concurrent cancellation
+      const updated = await tx.ticket.updateMany({
+        where: { id: ticketId, status: "ACTIVE" },
+        data: { status: "CANCELLED" },
+      });
+
+      // Defense in depth: if update affects zero records (race condition),
+      // throw ConflictException
+      if (!updated.count) {
+        throw new ConflictException("Bilet statusu dəyişib. Yenidən yoxlayın");
+      }
+
+      // Reload the ticket with existing relations
+      const updatedTicket = await tx.ticket.findUniqueOrThrow({
+        where: { id: ticketId },
+        include: {
+          exam: { select: { id: true, code: true, title: true } },
+          session: { select: { id: true, sessionCode: true } },
+          candidate: {
+            select: { id: true, candidate_number: true, full_name: true },
+          },
+          branch: { select: { id: true, name: true, code: true } },
+          seller: { select: { id: true, email: true, fullName: true } },
         },
-        branch: { select: { id: true, name: true, code: true } },
-        seller: { select: { id: true, email: true, fullName: true } },
-      },
-    });
+      });
 
-    return {
-      ...mapTicketView(updated),
-      cancelled: true,
-    };
+      // Record the audit event before committing the transaction
+      // If this fails, the transaction rolls back, undoing the status change
+      await this.audit.log(
+        "TICKET_CANCELLED",
+        user.userId,
+        "Ticket",
+        updatedTicket.id,
+        {
+          ticketCode: updatedTicket.code,
+          previousStatus: "ACTIVE",
+          newStatus: "CANCELLED",
+          paymentStatus: updatedTicket.paymentStatus,
+          branchId: updatedTicket.branchId,
+        },
+        tx,
+      );
+
+      return {
+        ...mapTicketView(updatedTicket),
+        cancelled: true,
+      };
+    });
   }
 
   async findByCode(code: string, user: AuthenticatedUser) {
