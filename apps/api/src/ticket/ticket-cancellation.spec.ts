@@ -1,5 +1,5 @@
 /// <reference types="vitest"
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
@@ -59,7 +59,7 @@ beforeAll(async () => {
     create: {
       email: "ticket-cancel-seller@example.com",
       fullName: "Bilet Ləğv Satıcısı",
-      passwordHash: "not-used-in-tests",
+      passwordHash: "$argon2id$v=19$m=65536,p=4,t=3$6As1Gn8O2xNdD2hlUL8juw$umDVCOM12QYKxhLKbzRbnIYMbpJw49DODmW2KZlDyZk",
       isActive: true,
     },
   });
@@ -196,12 +196,13 @@ describe("Ticket cancellation integration", () => {
     expect(auditRecord?.entityId).toBe(ticketId);
 
     const metadata = auditRecord?.metadata;
-    expect(metadata).toBeDefined();
-    expect(metadata?.ticketCode).toBe(ticketCodeVal);
-    expect(metadata?.previousStatus).toBe("ACTIVE");
-    expect(metadata?.newStatus).toBe("CANCELLED");
-    expect(metadata?.paymentStatus).toBe("PENDING");
-    expect(metadata?.branchId).toBeDefined();
+    expect(metadata).toMatchObject({
+      ticketCode: ticketCodeVal,
+      previousStatus: "ACTIVE",
+      newStatus: "CANCELLED",
+      paymentStatus: "PENDING",
+    });
+    expect(metadata).toHaveProperty("branchId");
   });
 
   it("repeated cancellation is rejected", async () => {

@@ -12,5 +12,8 @@ class Settings(BaseSettings):
     omr_question_count: int = 150
     omr_choice_count: int = 5
 
+    # Loaded from OMR_WORKER_SECRET in the process environment or .env.
+    omr_worker_secret: str = ""
+
 
 settings = Settings()

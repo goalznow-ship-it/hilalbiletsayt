@@ -1,8 +1,9 @@
 """Authenticate before multipart parsing; refuse unbounded chunked requests."""
 import hmac
-import os
+
 from starlette.responses import JSONResponse
 from starlette.exceptions import HTTPException
+from app.core.config import settings
 
 
 class WorkerAuth:
@@ -11,7 +12,7 @@ class WorkerAuth:
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and scope["path"].startswith("/api/omr"):
-            secret = os.environ.get("OMR_WORKER_SECRET", "")
+            secret = settings.omr_worker_secret
             headers = dict(scope["headers"])
             supplied = headers.get(b"authorization", b"").decode("latin1")
             if len(secret) < 32 or not hmac.compare_digest(supplied, "Bearer " + secret):
