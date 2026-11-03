@@ -26,7 +26,7 @@ have been replaced by this file; the git history keeps them.
 | 12 | Fresh clone → production profile healthy | PASS (with one documented step) | clone → `cp .env.example .env` → `./scripts/generate-secrets.sh .env` → `docker compose --profile production up -d --build --wait` → all 7 services healthy/exited 0 in ~30 s. The secret generation step is intentional: a plain copy of the template must not produce a running production system |
 | 13 | Migrations apply cleanly | PASS | 15 migrations on an empty DB (local, CI config, stack); `prisma migrate diff … --exit-code` = 0 (schema drift found and fixed: missing unique `tickets.code`) |
 | 14 | Backup and restore tested | PASS | `scripts/backup-restore-drill.sh` on the production stack with sales, a closed day, OMR scan and published results: fingerprints of tickets, closures, users, OMR pages, audit logs, migrations and scan files identical |
-| 15 | CI pipeline | PARTIAL | `.github/workflows/ci.yml` written and YAML-validated; **not executed on GitHub** (no push allowed in this pass). Every step was run locally with the commands below |
+| 15 | CI pipeline | PASS | GitHub Actions run 41723908676 on `15bbad6`: all 4 jobs green (install/typecheck/lint/unit/e2e/build, OMR tests, dependency audit, Docker production stack + load test + Playwright + backup drill). The first run found two real issues (Node 22 test glob, Pillow CVEs), fixed in `15bbad6` |
 | 16 | Accessibility / mobile on seller and scan screens | PASS | Playwright + axe (WCAG 2.1 A/AA) on 7 screens × desktop/Pixel 7, no horizontal overflow, 44 px touch target on mobile: 16/16 |
 
 ## Verification (2026-11-04, local machine, PostgreSQL 16 in Docker)
@@ -65,7 +65,7 @@ have been replaced by this file; the git history keeps them.
 
 ## Known limitations and risks
 
-* **CI has not run on GitHub.** First push will be its first execution.
+* GitHub warns that actions on Node 20 (checkout@v4, setup-node@v4, setup-python@v5, pnpm/action-setup@v4) are deprecated; bump them when newer majors are adopted.
 * Redis is in the stack but unused; OMR processing is synchronous (no queue).
 * RustFS/S3 storage was removed from compose because the code never used it;
   OMR scans live on a Docker volume (back it up with `scripts/backup.sh`).

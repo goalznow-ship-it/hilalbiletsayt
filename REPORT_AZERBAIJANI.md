@@ -52,8 +52,8 @@ Tapşırığın 1–4-cü bölmələri repozitoriyada yoxdur və istifadə olunm
 
 ## Hazırlıq meyarları
 
-16 meyardan 15-i **PASS**, 1-i **PARTIAL**: CI faylı hazırdır, lakin GitHub-da
-hələ işə salınmayıb (kod GitHub-a göndərilməyib). Ətraflı sübutlar:
+16 meyarın hamısı **PASS**. GitHub Actions-da CI-nin bütün mərhələləri uğurla
+keçib (yük testi, brauzer testləri və bərpa təlimi daxil olmaqla). Ətraflı sübutlar:
 `docs/IMPLEMENTATION_STATUS.md`.
 
 ## Riskler və məhdudiyyətlər
