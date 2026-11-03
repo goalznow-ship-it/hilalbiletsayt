@@ -34,6 +34,7 @@ model Branch {
   tickets       Ticket[]
 
   candidates    Candidate[]
+  dayClosures   BusinessDayClosure[]
 
   @@index([isActive])
   @@map("branches")
@@ -52,6 +53,7 @@ model User {
   userBranchRoles UserBranchRole[]
 
   tickets       Ticket[]
+  dayClosures   BusinessDayClosure[]
 
   @@index([isActive])
   @@map("users")
@@ -87,6 +89,9 @@ model Exam {
   createdBy   String   @db.Uuid
   createdAt   DateTime @default(now())
   updatedAt   DateTime @default(now()) @updatedAt
+  /// Results are hidden from the public until this is set.
+  resultsPublishedAt DateTime? @map("results_published_at")
+  resultsPublishedBy String?   @db.Uuid @map("results_published_by")
 
   sessions      ExamSession[]
   registrations ExaminationRegistration[]
@@ -205,10 +210,10 @@ model Ticket {
   price       Int
   status      String   @default("ACTIVE")
   type        String   @default("STANDARD")
-  qrCode      String   @map("qr_code")
+  qrCode      String   @unique @map("qr_code")
   registeredAt DateTime @default(now()) @map("registered_at")
   usedAt      DateTime? @map("used_at")
-  usedBy      String?   @map("used_by")
+  usedBy      String?   @db.Uuid @map("used_by")
   paymentStatus String   @default("PENDING") // PENDING, PAID, REFUNDED
   paymentMethod String?  
   paymentDate  DateTime?
@@ -299,4 +304,27 @@ model OmrPage {
   sheet       OmrSheet? @relation(fields: [sheetId], references: [id], onDelete: Restrict)
   @@unique([uploadId, pageIndex])
   @@map("omr_pages")
+}
+
+/// Append-only cash-desk closure of one branch for one Asia/Baku business date.
+/// Database triggers freeze every ticket sold in that branch on that date.
+model BusinessDayClosure {
+  id             String   @id @default(uuid()) @db.Uuid
+  branchId       String   @db.Uuid @map("branch_id")
+  businessDate   DateTime @db.Date @map("business_date")
+  closedBy       String   @db.Uuid @map("closed_by")
+  closedAt       DateTime @default(now()) @map("closed_at")
+  ticketCount    Int      @map("ticket_count")
+  paidCount      Int      @map("paid_count")
+  cancelledCount Int      @map("cancelled_count")
+  /// Sum of PAID live tickets in integer qəpik.
+  paidAmount     Int      @map("paid_amount")
+  summary        Json
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  closer User   @relation(fields: [closedBy], references: [id], onDelete: Restrict)
+
+  @@unique([branchId, businessDate], map: "business_day_closures_branch_date_key")
+  @@index([businessDate])
+  @@map("business_day_closures")
 }

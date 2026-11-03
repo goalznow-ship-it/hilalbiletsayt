@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+// Values that must never reach production: the old compose default and the
+// placeholders shipped in .env.example.
+const KNOWN_WEAK_SECRETS = new Set([
+  "your-very-secure-secret-at-least-32-characters-long",
+]);
+const isPlaceholder = (value: string | undefined) =>
+  !!value && (KNOWN_WEAK_SECRETS.has(value) || /change[-_]?me/i.test(value));
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().int().positive().default(3001),
@@ -19,8 +27,62 @@ const envSchema = z.object({
     .optional(),
 
   OMR_STORAGE_DIR: z.string().min(1).optional(),
+
+  /// HMAC key for ticket QR payloads. Derived from JWT_SECRET outside production.
+  QR_SIGNING_SECRET: z.string()
+    .min(32, "QR_SIGNING_SECRET must be at least 32 characters")
+    .optional(),
+
+  /// First super administrator, created once on startup when no SUPER_ADMIN exists.
+  BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),
+  BOOTSTRAP_ADMIN_PASSWORD: z.string()
+    .min(12, "BOOTSTRAP_ADMIN_PASSWORD must be at least 12 characters")
+    .optional(),
+  BOOTSTRAP_ADMIN_NAME: z.string().min(1).max(120).optional(),
+  BOOTSTRAP_BRANCH_CODE: z.string().regex(/^[A-Z0-9_-]{2,32}$/).optional(),
+  BOOTSTRAP_BRANCH_NAME: z.string().min(1).max(120).optional(),
 }).superRefine((config, context) => {
+  if (!!config.BOOTSTRAP_ADMIN_EMAIL !== !!config.BOOTSTRAP_ADMIN_PASSWORD) {
+    context.addIssue({
+      code: "custom",
+      path: ["BOOTSTRAP_ADMIN_PASSWORD"],
+      message: "BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD must be set together",
+    });
+  }
+
   if (config.NODE_ENV === "production") {
+    for (const key of ["JWT_SECRET", "OMR_WORKER_SECRET", "QR_SIGNING_SECRET", "BOOTSTRAP_ADMIN_PASSWORD"] as const) {
+      if (isPlaceholder(config[key])) {
+        context.addIssue({
+          code: "custom",
+          path: [key],
+          message: `${key} still has a placeholder or known default value`,
+        });
+      }
+    }
+
+    if (!config.QR_SIGNING_SECRET) {
+      context.addIssue({
+        code: "custom",
+        path: ["QR_SIGNING_SECRET"],
+        message: "QR_SIGNING_SECRET is required in production",
+      });
+    } else if (config.QR_SIGNING_SECRET === config.JWT_SECRET) {
+      context.addIssue({
+        code: "custom",
+        path: ["QR_SIGNING_SECRET"],
+        message: "QR_SIGNING_SECRET must differ from JWT_SECRET",
+      });
+    }
+
+    if (!config.CORS_ORIGIN) {
+      context.addIssue({
+        code: "custom",
+        path: ["CORS_ORIGIN"],
+        message: "CORS_ORIGIN is required in production",
+      });
+    }
+
     if (!config.OMR_WORKER_SECRET) {
       context.addIssue({
         code: "custom",
