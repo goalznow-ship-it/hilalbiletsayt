@@ -9,6 +9,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { PublicPurchaseDto } from "./public-sales.dto";
 import { isValidQepikPrice } from "../common/money";
+import { rethrowDbError } from "../common/db-errors";
+import { signTicketToken } from "../common/qr-signature";
 
 @Injectable()
 export class PublicSalesService {
@@ -190,7 +192,7 @@ export class PublicSalesService {
         tx,
       );
       return { receiptToken: ticket.receiptToken };
-    });
+    }).catch(rethrowDbError);
   }
 
   async receipt(token: string) {
@@ -218,6 +220,6 @@ export class PublicSalesService {
       },
     });
     if (!ticket) throw new NotFoundException("Bilet tapılmadı.");
-    return ticket;
+    return { ...ticket, qrCode: signTicketToken(ticket.qrCode) };
   }
 }

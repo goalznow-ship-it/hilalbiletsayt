@@ -14,11 +14,15 @@ import { resolvePagination, toPaginated } from "../common/pagination";
 import {
   AuthenticatedUser,
   isCentralAdmin,
-  assertBranchAllowed,
   candidateVisibilityWhere,
-  getBranchIds,
+  getSalesBranchIds,
 } from "../auth/authorization";
 import { isValidQepikPrice } from "../common/money";
+import { rethrowDbError } from "../common/db-errors";
+import {
+  signTicketToken,
+  verifySignedTicketToken,
+} from "../common/qr-signature";
 import * as crypto from "crypto";
 
 type TicketView = {
@@ -89,7 +93,8 @@ function mapTicketView(ticket: {
     price: ticket.price,
     status: ticket.status,
     type: ticket.type,
-    qrCode: ticket.qrCode,
+    // Only the signed payload ever leaves the server.
+    qrCode: ticket.qrCode ? signTicketToken(ticket.qrCode) : null,
     registeredAt: ticket.registeredAt,
     usedAt: ticket.usedAt,
     usedBy: ticket.usedBy,
@@ -139,9 +144,9 @@ export class TicketService {
       where.status = filters.status;
     }
 
-    // Branch scoping: non-central users can only see tickets in their branches
+    // Branch scoping: sellers and managers only see their own branches' sales.
     if (!isCentralAdmin(user)) {
-      const branchIds = getBranchIds(user);
+      const branchIds = getSalesBranchIds(user);
       where.OR = [
         { branchId: { in: branchIds } },
         {
@@ -220,7 +225,7 @@ export class TicketService {
   ): Promise<void> {
     if (isCentralAdmin(user)) return;
 
-    const branchIds = getBranchIds(user);
+    const branchIds = getSalesBranchIds(user);
     if (ticket.branchId && branchIds.includes(ticket.branchId)) return;
 
     // A candidate registered in one of the user's branches may be visible even
@@ -286,7 +291,7 @@ export class TicketService {
       const candidate = await this.prisma.candidate.findFirst({
         where: {
           id: data.candidateId,
-          ...candidateVisibilityWhere(user),
+          ...candidateVisibilityWhere(user, getSalesBranchIds(user)),
         },
         select: { id: true, branch_id: true, is_active: true },
       });
@@ -299,19 +304,27 @@ export class TicketService {
       candidateBranchId = candidate.branch_id;
     }
 
-    // Determine and authorize the branch.
-    const branchId = candidateBranchId ?? data.branchId ?? null;
-    if (branchId) {
-      if (!isCentralAdmin(user)) {
-        assertBranchAllowed(user, branchId);
-      }
-      const branch = await this.prisma.branch.findUnique({
-        where: { id: branchId },
-        select: { id: true },
-      });
-      if (!branch) {
-        throw new BadRequestException("Filial tapılmadı");
-      }
+    // Determine and authorize the branch. Every staff sale belongs to a branch
+    // so that it is covered by branch isolation and by the day closure.
+    const salesBranchIds = getSalesBranchIds(user);
+    const branchId =
+      candidateBranchId ??
+      data.branchId ??
+      (!isCentralAdmin(user) && salesBranchIds.length === 1
+        ? salesBranchIds[0]
+        : null);
+    if (!branchId) {
+      throw new BadRequestException("Satış üçün filial seçin");
+    }
+    if (!isCentralAdmin(user) && !salesBranchIds.includes(branchId)) {
+      throw new ForbiddenException("Bu filial üçün icazəniz yoxdur");
+    }
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { id: true, isActive: true },
+    });
+    if (!branch || !branch.isActive) {
+      throw new BadRequestException("Filial tapılmadı");
     }
 
     if (data.paymentDate) {
@@ -322,10 +335,7 @@ export class TicketService {
 
     // Generate an unguessable verification token; the QR payload carries a
     // public verification URL, never candidate data.
-    const code = `HK-${data.examId.slice(0, 8)}-${Date.now().toString(36).toUpperCase()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)
-      .toUpperCase()}`;
+    const code = `HK-${crypto.randomBytes(10).toString("hex").toUpperCase()}`;
     const qrCode = crypto.randomBytes(32).toString("base64url");
 
     const sellerId = user.userId;
@@ -432,12 +442,13 @@ export class TicketService {
       );
 
       return created;
-    });
+    }).catch(rethrowDbError);
 
+    const view = mapTicketView(ticket);
     return {
-      ...mapTicketView(ticket),
-      qrToken: ticket.qrCode,
-      qrPayload: `/tickets/verify/${ticket.qrCode}`,
+      ...view,
+      qrToken: view.qrCode,
+      qrPayload: `/tickets/verify/${view.qrCode}`,
     };
   }
 
@@ -445,7 +456,12 @@ export class TicketService {
    * Public ticket verification by opaque QR token.
    * Returns only the minimum data needed to admit a ticket holder.
    */
-  async verifyByToken(token: string) {
+  async verifyByToken(signed: string) {
+    // Forged or unsigned codes are rejected without touching the database.
+    const token = verifySignedTicketToken(signed);
+    if (!token) {
+      throw new NotFoundException("Bilet tapılmadı");
+    }
     const ticket = await this.prisma.ticket.findFirst({
       where: { qrCode: token },
       include: {
@@ -519,7 +535,7 @@ export class TicketService {
           tx,
         );
       return { confirmed: true };
-    });
+    }).catch(rethrowDbError);
   }
 
   async useTicket(ticketId: string, user: AuthenticatedUser) {
@@ -546,7 +562,8 @@ export class TicketService {
       );
     }
 
-    // Mark ticket as used
+    // Mark ticket as used. The conditional update is atomic: of two
+    // concurrent scans exactly one sees status ACTIVE.
     const claimed = await this.prisma.ticket.updateMany({
       where: {
         id: ticketId,
@@ -557,11 +574,14 @@ export class TicketService {
         ],
       },
       data: { status: "USED", usedAt: new Date(), usedBy: user.userId },
-    });
+    }).catch(rethrowDbError);
     if (!claimed.count)
       throw new ConflictException(
         "Bilet artıq istifadə edilib və ya ləğv olunub",
       );
+    await this.audit.log("TICKET_USED", user.userId, "Ticket", ticketId, {
+      branchId: ticket.branchId,
+    });
     const updated = await this.prisma.ticket.findUniqueOrThrow({
       where: { id: ticketId },
       include: {
@@ -655,7 +675,25 @@ export class TicketService {
         ...mapTicketView(updatedTicket),
         cancelled: true,
       };
+    }).catch(rethrowDbError);
+  }
+
+  /** Entry scan at the exam door: signed QR -> admit exactly once. */
+  async scanByQr(scanned: string, user: AuthenticatedUser) {
+    // Scanners may deliver the whole verification URL; keep the last segment.
+    const signed = scanned.trim().split("/").pop() ?? "";
+    const token = verifySignedTicketToken(signed);
+    if (!token) {
+      throw new BadRequestException("QR kod etibarsızdır və ya saxtadır");
+    }
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { qrCode: token },
+      select: { id: true },
     });
+    if (!ticket) {
+      throw new NotFoundException("Bilet tapılmadı");
+    }
+    return this.useTicket(ticket.id, user);
   }
 
   async findByCode(code: string, user: AuthenticatedUser) {
@@ -689,8 +727,8 @@ export class TicketService {
         ? {
             branchId: {
               in: filters.branchId
-                ? getBranchIds(user).filter((id) => id === filters.branchId)
-                : getBranchIds(user),
+                ? getSalesBranchIds(user).filter((id) => id === filters.branchId)
+                : getSalesBranchIds(user),
             },
           }
         : {}),

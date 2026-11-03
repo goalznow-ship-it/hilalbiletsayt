@@ -8,6 +8,10 @@ export const CANDIDATE_MANAGER_ROLES = [
   "BRANCH_MANAGER",
 ];
 
+/** Roles that may sell tickets and see their own branch's sales. */
+export const SALES_ROLES = ["BRANCH_MANAGER", "SELLER"];
+export const TICKET_SELLER_ROLES = [...CENTRAL_ADMIN_ROLES, ...SALES_ROLES];
+
 export type AuthenticatedUser = {
   userId: string;
   email?: string;
@@ -28,13 +32,30 @@ export function isCentralAdmin(user: AuthenticatedUser | undefined): boolean {
   return hasAnyRole(user, CENTRAL_ADMIN_ROLES);
 }
 
-export function getBranchIds(user: AuthenticatedUser | undefined): string[] {
+export function getBranchIdsForRoles(
+  user: AuthenticatedUser | undefined,
+  roles: readonly string[],
+): string[] {
   const ids = user?.userBranchRoles
     ? user.userBranchRoles
-        .filter((entry) => entry.role === "BRANCH_MANAGER")
+        .filter((entry) => roles.includes(entry.role))
         .map((entry) => entry.branchId)
     : (user?.branches ?? []).map((branch) => branch.id);
   return [...new Set(ids.filter(Boolean))];
+}
+
+/** Branches the user manages (candidate administration). */
+export function getBranchIds(user: AuthenticatedUser | undefined): string[] {
+  return getBranchIdsForRoles(user, ["BRANCH_MANAGER"]);
+}
+
+/**
+ * Branches whose ticket sales the user may create and see. A seller of
+ * branch A never receives branch B here, so every sales query scoped by this
+ * list is isolated per branch.
+ */
+export function getSalesBranchIds(user: AuthenticatedUser | undefined): string[] {
+  return getBranchIdsForRoles(user, SALES_ROLES);
 }
 
 export function isBranchAllowed(
@@ -55,9 +76,9 @@ export function assertBranchAllowed(
 
 export function candidateVisibilityWhere(
   user: AuthenticatedUser,
+  branchIds: string[] = getBranchIds(user),
 ): Prisma.CandidateWhereInput {
   if (isCentralAdmin(user)) return {};
-  const branchIds = getBranchIds(user);
   return {
     OR: [
       { branch_id: { in: branchIds } },

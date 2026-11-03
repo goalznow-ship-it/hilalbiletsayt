@@ -14,11 +14,15 @@ async function bootstrap(): Promise<void> {
     app.getHttpAdapter().getInstance().set("trust proxy", trustedProxies);
   }
 
+  app.getHttpAdapter().getInstance().disable("x-powered-by");
   app.setGlobalPrefix("api");
-  app.enableCors({
-    origin: process.env.CORS_ORIGIN ?? true,
-    credentials: true,
-  });
+  // Production requires an explicit allow-list (enforced by env validation);
+  // development falls back to the local web app only.
+  const corsOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:3000")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  app.enableCors({ origin: corsOrigins, credentials: true });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -27,16 +31,19 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle("Hilal Bilet Sistemi API")
-    .setDescription(
-      "Centralized examination ticket sales and OMR result management API",
-    )
-    .setVersion("0.1.0")
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup("api/docs", app, document);
+  // API documentation is a development aid only; never served in production.
+  if (process.env.NODE_ENV !== "production") {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle("Hilal Bilet Sistemi API")
+      .setDescription(
+        "Centralized examination ticket sales and OMR result management API",
+      )
+      .setVersion("0.1.0")
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup("api/docs", app, document);
+  }
 
   const port = process.env.PORT ? Number(process.env.PORT) : 3001;
   await app.listen(port, process.env.API_HOST || "0.0.0.0");

@@ -13,6 +13,14 @@ import { omrResultsPdf } from "./omr.pdf";
 export type ScanFile = { buffer: Buffer; originalname: string; mimetype: string; size: number };
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
 const mimeExtensions: Record<string, string> = { "application/pdf": ".pdf", "image/png": ".png", "image/jpeg": ".jpg" };
+const RESULTS_PUBLISHED = "Nəticələr dərc olunub; dəyişiklik üçün əvvəlcə dərcdən çıxarın.";
+
+/** FOR SHARE conflicts with the FOR UPDATE taken when results are published. */
+async function assertResultsUnpublished(tx: Prisma.TransactionClient, examId: string) {
+  const rows = await tx.$queryRaw<Array<{ published: Date | null }>>`
+    SELECT "results_published_at" AS published FROM "exams" WHERE "id" = ${examId}::uuid FOR SHARE`;
+  if (rows[0]?.published) throw new ConflictException(RESULTS_PUBLISHED);
+}
 
 @Injectable()
 export class OmrService {
@@ -235,6 +243,7 @@ export class OmrService {
         throw new ForbiddenException("Yalnız öz yükləmələrinizi yoxlaya bilərsiniz.");
       if (page.status !== "REVIEW" || page.upload.status !== "REVIEW")
         throw new ConflictException("Bu səhifə artıq yoxlanılıb və ya emal vəziyyəti dəyişib.");
+      await assertResultsUnpublished(tx, page.upload.examId);
       const sheet = page.sheet;
       if (!sheet) throw new ConflictException("Vərəqin QR identifikatoru təsdiqlənməyib. Avtomatik finalizasiya qadağandır.");
       this.assertBranch(user, sheet.branchId);
@@ -308,7 +317,9 @@ export class OmrService {
     if (!files?.length || files.length > 4 || files.reduce((sum, f) => sum + f.size, 0) > 50 * 1024 * 1024)
       throw new BadRequestException("Ən çox 4 fayl və cəmi 50 MB qəbul olunur.");
     if (!isCentralAdmin(user) && !(user.branches ?? []).some(b => this.branchAllowed(user, b.id))) throw new ForbiddenException();
-    if (!await this.prisma.exam.findUnique({ where: { id: examId } })) throw new NotFoundException("İmtahan tapılmadı.");
+    const exam = await this.prisma.exam.findUnique({ where: { id: examId }, select: { resultsPublishedAt: true } });
+    if (!exam) throw new NotFoundException("İmtahan tapılmadı.");
+    if (exam.resultsPublishedAt) throw new ConflictException(RESULTS_PUBLISHED);
     for (const file of files) {
       const ext = extname(file.originalname).toLowerCase();
       const expected = mimeExtensions[file.mimetype];
@@ -359,6 +370,7 @@ export class OmrService {
         await tx.$queryRawUnsafe("SELECT pg_advisory_xact_lock(730143)::text");
         const current = await tx.omrUpload.findUniqueOrThrow({ where: { id: upload.id } });
         if (current.attemptId !== attemptId || current.status !== "PROCESSING") return;
+        await assertResultsUnpublished(tx, examId);
         let review = parsed.status !== "READ";
         const pageIndexes = new Set<number>();
         for (const page of parsed.pages) {

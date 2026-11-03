@@ -151,7 +151,8 @@ describe("Ticket purchase integration (real PostgreSQL test database)", () => {
     expect(ticket.price).toBe(3500);
     expect(ticket.status).toBe("ACTIVE");
     expect(ticket.paymentStatus).toBe("PENDING");
-    expect(ticket.qrCode).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    // Signed payload: <43-char random token>.<43-char HMAC-SHA256>
+    expect(ticket.qrCode).toMatch(/^[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}$/);
     expect(ticket.qrPayload).toBe(`/tickets/verify/${ticket.qrCode}`);
     expect(ticket.candidateFullName).toBe("Aysel Məmmədova");
 

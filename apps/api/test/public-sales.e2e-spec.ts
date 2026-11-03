@@ -9,6 +9,7 @@ import { AppModule } from "../src/app.module";
 import { PrismaService } from "../src/prisma/prisma.service";
 import { PublicSalesService } from "../src/public-sales/public-sales.service";
 import { TicketService } from "../src/ticket/ticket.service";
+import { signTicketToken } from "../src/common/qr-signature";
 
 const url = process.env.DATABASE_URL;
 if (
@@ -135,8 +136,13 @@ describe("Public sales HTTP and real database", () => {
       .expect(200);
     expect(receipt.body.candidate.full_name).toBe(data.fullName);
     expect(receipt.body.candidate.phone).toBeUndefined();
-    const verified = await request(app.getHttpServer())
+    expect(receipt.body.qrCode).toBe(signTicketToken(ticket.qrCode));
+    // The raw stored token is not a valid QR payload without its signature.
+    await request(app.getHttpServer())
       .get(`/api/ticket/verify/${ticket.qrCode}`)
+      .expect(404);
+    const verified = await request(app.getHttpServer())
+      .get(`/api/ticket/verify/${receipt.body.qrCode}`)
       .expect(200);
     for (const value of [
       data.fullName,

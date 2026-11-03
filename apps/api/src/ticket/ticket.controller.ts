@@ -14,7 +14,11 @@ import { TicketService } from "./ticket.service";
 import { CreateTicketDto } from "./create-ticket.dto";
 import { UpdateTicketDto } from "./update-ticket.dto";
 import { TicketQueryDto } from "./ticket-query.dto";
-import { AuthenticatedUser } from "../auth/authorization";
+import {
+  AuthenticatedUser,
+  TICKET_SELLER_ROLES,
+} from "../auth/authorization";
+import { ScanTicketDto } from "./scan-ticket.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import {
@@ -31,7 +35,7 @@ export class TicketController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(["SUPER_ADMIN", "CENTRAL_ADMIN", "BRANCH_MANAGER"])
+  @Roles(TICKET_SELLER_ROLES)
   @ApiOperation({ summary: "Generate new ticket" })
   @ApiResponse({ status: 201, description: "Ticket successfully generated" })
   @ApiBearerAuth()
@@ -102,9 +106,21 @@ export class TicketController {
     return this.ticketService.findOne(ticketId, user);
   }
 
+  @Post("scan")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(TICKET_SELLER_ROLES)
+  @ApiOperation({ summary: "Admit a ticket holder by signed QR (once only)" })
+  @ApiResponse({ status: 201, description: "Ticket admitted" })
+  @ApiResponse({ status: 400, description: "Forged QR or unpaid ticket" })
+  @ApiResponse({ status: 409, description: "Ticket already scanned" })
+  @ApiBearerAuth()
+  scan(@Body() dto: ScanTicketDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.ticketService.scanByQr(dto.qr, user);
+  }
+
   @Put(":id/payment")
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(["SUPER_ADMIN", "CENTRAL_ADMIN", "BRANCH_MANAGER"])
+  @Roles(TICKET_SELLER_ROLES)
   confirmPayment(
     @Param("id") id: string,
     @CurrentUser() user: AuthenticatedUser,

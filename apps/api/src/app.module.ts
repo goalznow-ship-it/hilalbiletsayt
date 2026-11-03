@@ -14,6 +14,9 @@ import { TicketModule } from "./ticket/ticket.module";
 import { QuestionModule } from "./question/question.module";
 import { validateEnv } from "./config/env.validation";
 import { OmrModule } from "./omr/omr.module";
+import { DayClosureModule } from "./day-closure/day-closure.module";
+import { ResultsModule } from "./results/results.module";
+import { BootstrapModule } from "./bootstrap/bootstrap.module";
 
 @Module({
   imports: [
@@ -29,6 +32,9 @@ import { OmrModule } from "./omr/omr.module";
     TicketModule,
     QuestionModule,
     OmrModule,
+    DayClosureModule,
+    ResultsModule,
+    BootstrapModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
   ],
   providers: [
