@@ -549,6 +549,9 @@ export class TicketService {
 
     await this.assertTicketAccess(ticket, user);
     if (!isTicketValidForEntry(ticket)) {
+      if (ticket.status === "USED") {
+        throw new ConflictException("Bilet artıq istifadə edilib");
+      }
       if (ticket.status !== "ACTIVE") {
         throw new BadRequestException(
           "Bu bilet artıq istifadə edilib və ya ləğv edilib",

@@ -35,7 +35,11 @@ import { BootstrapModule } from "./bootstrap/bootstrap.module";
     DayClosureModule,
     ResultsModule,
     BootstrapModule,
-    ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
+    // Per-IP limit for all API routes. Branch offices behind one NAT address
+    // share it, so production deployments usually raise it (see .env.example).
+    ThrottlerModule.forRoot([
+      { ttl: 60000, limit: Number(process.env.API_RATE_LIMIT_PER_MINUTE ?? 60) || 60 },
+    ]),
   ],
   providers: [
     {

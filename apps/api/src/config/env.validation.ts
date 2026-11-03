@@ -28,6 +28,8 @@ const envSchema = z.object({
 
   OMR_STORAGE_DIR: z.string().min(1).optional(),
 
+  API_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(10).max(100000).optional(),
+
   /// HMAC key for ticket QR payloads. Derived from JWT_SECRET outside production.
   QR_SIGNING_SECRET: z.string()
     .min(32, "QR_SIGNING_SECRET must be at least 32 characters")
