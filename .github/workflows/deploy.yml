@@ -1,0 +1,92 @@
+# Continuous delivery TEMPLATE. It contains no secrets and does nothing until
+# the repository owner configures the `production` environment:
+#   Settings -> Environments -> production
+#     required reviewers (manual approval before every deploy)
+#     secrets:   DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY, DEPLOY_KNOWN_HOSTS
+#     variables: DEPLOY_PATH (e.g. /opt/hilal)
+# The server keeps its own .env (secrets never leave the server).
+name: Deploy (template)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git tag or commit to deploy
+        required: true
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/hilal
+
+jobs:
+  images:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - id: meta
+        run: echo "tag=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}-api:${{ steps.meta.outputs.tag }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}-web:${{ steps.meta.outputs.tag }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: services/omr-worker
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}-omr-worker:${{ steps.meta.outputs.tag }}
+
+  deploy:
+    name: Deploy to production server
+    needs: images
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency: production-deploy
+    steps:
+      - name: Configure SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+      - name: Backup, pull, migrate, restart
+        env:
+          TAG: ${{ needs.images.outputs.tag }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "$USER@$HOST" "set -eu
+            cd '$DEPLOY_PATH'
+            git fetch --tags && git checkout --detach '$TAG' 2>/dev/null || git checkout --detach '${{ inputs.ref || github.ref_name }}'
+            ./scripts/backup.sh backups
+            export IMAGE_TAG='$TAG'
+            docker pull ${{ env.IMAGE_PREFIX }}-api:\$IMAGE_TAG && docker tag ${{ env.IMAGE_PREFIX }}-api:\$IMAGE_TAG hilal-api:\$IMAGE_TAG
+            docker pull ${{ env.IMAGE_PREFIX }}-web:\$IMAGE_TAG && docker tag ${{ env.IMAGE_PREFIX }}-web:\$IMAGE_TAG hilal-web:\$IMAGE_TAG
+            docker pull ${{ env.IMAGE_PREFIX }}-omr-worker:\$IMAGE_TAG && docker tag ${{ env.IMAGE_PREFIX }}-omr-worker:\$IMAGE_TAG hilal-omr-worker:\$IMAGE_TAG
+            docker compose --profile production up -d --no-build --wait --wait-timeout 300
+            docker compose --profile production ps"
