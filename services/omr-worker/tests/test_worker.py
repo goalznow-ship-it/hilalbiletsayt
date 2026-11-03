@@ -24,7 +24,7 @@ def test_worker_auth_precedes_file_parsing(monkeypatch):
     client = TestClient(app)
     assert client.post("/api/omr/process", content=b"garbage").status_code == 401
     result = client.post("/api/omr/process", headers={"Authorization": f"Bearer {secret}"},
-                         files=[("files", ("sheet.pdf", sheet(), "application/pdf"))])
+                         files=[("files", ("sheet.pdf", sheet(marks={0: [1]}), "application/pdf"))])
     assert result.status_code == 200, result.text
     assert result.json()["files"][0]["pages"][0]["status"] == "READ"
     assert client.post("/api/omr/process", headers={"Authorization": f"Bearer {secret}",

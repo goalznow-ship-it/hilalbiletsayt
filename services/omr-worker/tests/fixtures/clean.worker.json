@@ -1,0 +1,334 @@
+{
+  "answers": [
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "marked": [
+        "A"
+      ],
+      "question": 1,
+      "selected": "A",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ],
+      "marked": [
+        "D"
+      ],
+      "question": 2,
+      "selected": "D",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "marked": [
+        "B"
+      ],
+      "question": 3,
+      "selected": "B",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "marked": [
+        "E"
+      ],
+      "question": 4,
+      "selected": "E",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "marked": [
+        "C"
+      ],
+      "question": 5,
+      "selected": "C",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "marked": [
+        "A"
+      ],
+      "question": 6,
+      "selected": "A",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ],
+      "marked": [
+        "D"
+      ],
+      "question": 7,
+      "selected": "D",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "marked": [
+        "B"
+      ],
+      "question": 8,
+      "selected": "B",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "marked": [
+        "E"
+      ],
+      "question": 9,
+      "selected": "E",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "marked": [
+        "C"
+      ],
+      "question": 10,
+      "selected": "C",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "marked": [
+        "A"
+      ],
+      "question": 11,
+      "selected": "A",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ],
+      "marked": [
+        "D"
+      ],
+      "question": 12,
+      "selected": "D",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "marked": [
+        "B"
+      ],
+      "question": 13,
+      "selected": "B",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "marked": [
+        "E"
+      ],
+      "question": 14,
+      "selected": "E",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "marked": [
+        "C"
+      ],
+      "question": 15,
+      "selected": "C",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "marked": [
+        "A"
+      ],
+      "question": 16,
+      "selected": "A",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ],
+      "marked": [
+        "D"
+      ],
+      "question": 17,
+      "selected": "D",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "marked": [
+        "B"
+      ],
+      "question": 18,
+      "selected": "B",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "marked": [
+        "E"
+      ],
+      "question": 19,
+      "selected": "E",
+      "state": "MARKED"
+    },
+    {
+      "confidence": 1.0,
+      "fillRatios": [
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "marked": [
+        "C"
+      ],
+      "question": 20,
+      "selected": "C",
+      "state": "MARKED"
+    }
+  ],
+  "choiceCount": 5,
+  "confidence": 1.0,
+  "engineVersion": "1.0.0",
+  "metadata": {},
+  "pageIndex": 0,
+  "questionCount": 20,
+  "reviewFlags": [],
+  "sheetToken": "Fixture-Sheet-Token_0123456789abcdefghijklm",
+  "status": "READ",
+  "templateVersion": "hilal-a4-v1"
+}

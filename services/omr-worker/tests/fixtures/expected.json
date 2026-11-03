@@ -1,0 +1,28 @@
+{
+  "token": "Fixture-Sheet-Token_0123456789abcdefghijklm",
+  "questionCount": 20,
+  "choiceCount": 5,
+  "answers": [
+    "A",
+    "D",
+    "B",
+    "E",
+    "C",
+    "A",
+    "D",
+    "B",
+    "E",
+    "C",
+    "A",
+    "D",
+    "B",
+    "E",
+    "C",
+    "A",
+    "D",
+    "B",
+    "E",
+    "C"
+  ],
+  "doubleMarkedQuestion": 4
+}

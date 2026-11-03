@@ -22,7 +22,12 @@ def process_image(image):
         if sharpness < 25:
             raise UnreadablePage("IMAGE_BLURRED")
         answers = read_answers(grey, spec)
-        flags = sorted({a["state"] for a in answers if a["state"] in ("UNCERTAIN", "MULTIPLE")})
+        flags = {a["state"] for a in answers if a["state"] in ("UNCERTAIN", "MULTIPLE")}
+        # A sheet with no marks at all is more likely a wrong page, a failed
+        # scan or an absent candidate than a real attempt: a human decides.
+        if all(a["state"] == "BLANK" for a in answers):
+            flags.add("ALL_BLANK")
+        flags = sorted(flags)
         base.update(answers=answers, confidence=min(a["confidence"] for a in answers),
                     status="REVIEW" if flags else "READ", reviewFlags=flags)
         metadata.update(sharpness=round(sharpness, 2), blankMax=BLANK_MAX, markMin=MARK_MIN)
