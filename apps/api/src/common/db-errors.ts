@@ -9,7 +9,7 @@ function describe(error: unknown): { code?: string; text: string } {
   const record = error as { code?: unknown; message?: unknown; meta?: unknown };
   return {
     code: typeof record.code === "string" ? record.code : undefined,
-    text: `${String(record.message ?? "")} ${JSON.stringify(record.meta ?? {})}`,
+    text: `${typeof record.message === "string" ? record.message : ""} ${JSON.stringify(record.meta ?? {})}`,
   };
 }
 
