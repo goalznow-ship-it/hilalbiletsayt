@@ -1,12 +1,13 @@
 "use client";
 import Link from "next/link";
+import { OMR_ENABLED } from "@/lib/features";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useSession } from "@/components/session-provider";
 
 type Exam = { id: string; title: string; code: string };
 type Question = { id: string; question: string; variants: string; correct: number; points: number };
 type Key = { id: string; variant: string; version: number; choiceCount: number; questionCount: number };
-const TEST = process.env.NEXT_PUBLIC_OMR_TEST_UPLOAD_ENABLED === "true";
+const TEST = OMR_ENABLED;
 
 export default function KeysPage() {
   const { user, initializing, request } = useSession();

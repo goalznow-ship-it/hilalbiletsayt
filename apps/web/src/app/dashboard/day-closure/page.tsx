@@ -139,7 +139,7 @@ export default function DayClosurePage() {
                   {preview.closure && new Date(preview.closure.closedAt).toLocaleString("az-AZ")}
                 </p>
               ) : canClose ? (
-                <Button className="mt-4 min-h-11" disabled={busy} onClick={close}>
+                <Button className="mt-4 min-h-[44px]" disabled={busy} onClick={close}>
                   {busy ? "Bağlanır…" : "Günü bağla"}
                 </Button>
               ) : (

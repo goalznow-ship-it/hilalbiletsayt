@@ -81,7 +81,7 @@ export default function ScanPage() {
             Skaner kodu avtomatik daxil edir; telefonda kodu yapışdırıb
             &laquo;Yoxla&raquo; düyməsini basın.
           </p>
-          <Button type="submit" disabled={busy || !value.trim()} className="min-h-11">
+          <Button type="submit" disabled={busy || !value.trim()} className="min-h-[44px]">
             {busy ? "Yoxlanılır…" : "Yoxla"}
           </Button>
         </form>

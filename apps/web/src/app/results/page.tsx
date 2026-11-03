@@ -81,7 +81,7 @@ function ResultLookup() {
           value={candidateNumber}
           onChange={(event) => setCandidateNumber(event.target.value)}
         />
-        <Button type="submit" className="min-h-11" disabled={busy}>
+        <Button type="submit" className="min-h-[44px]" disabled={busy}>
           {busy ? "Yoxlanılır…" : "Nəticəni göstər"}
         </Button>
       </form>

@@ -53,18 +53,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Link
         href="/dashboard"
         className="brand-lockup"
-        aria-label="Hilal Bilet Sistemi — idarə paneli"
       >
         <Image
           src="/branding/hilal-logo.png"
-          alt="Hilal Kursları"
+          alt=""
           width={46}
           height={46}
           priority
         />
         <span>
-          Hilal<span>Bilet Sistemi</span>
+          Hilal <span>Bilet Sistemi</span>
         </span>
+        <span className="sr-only"> — idarə paneli</span>
       </Link>
       <div className="sidebar-caption">İDARƏETMƏ</div>
       <nav className="main-nav" aria-label="Əsas naviqasiya">

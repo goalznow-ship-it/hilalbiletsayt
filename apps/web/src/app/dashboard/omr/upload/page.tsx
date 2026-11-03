@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { OMR_ENABLED } from "@/lib/features";
 import { useEffect, useState, type FormEvent } from "react";
 import { useSession } from "@/components/session-provider";
 
@@ -16,8 +17,7 @@ const MAX_SIZE = 25 * 1024 * 1024;
 
 // Real upload yalnız ayrıca test worker təsdiqləndikdən
 // sonra aktivləşdirilməlidir.
-const UPLOAD_ENABLED =
-  process.env.NEXT_PUBLIC_OMR_TEST_UPLOAD_ENABLED === "true";
+const UPLOAD_ENABLED = OMR_ENABLED;
 
 function parseExams(payload: unknown): Exam[] {
   let items: unknown = payload;

@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { OMR_ENABLED } from "@/lib/features";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/components/session-provider";
@@ -12,7 +13,7 @@ type PageData = { answers?: Answer[]; choiceCount?: number; reviewFlags?: string
 type ScanPage = { id: string; pageIndex: number; sheetId: string | null; status: string; data: PageData };
 type Upload = { id: string; status: string; error?: string | null; pages: ScanPage[] };
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
-const TEST = process.env.NEXT_PUBLIC_OMR_TEST_UPLOAD_ENABLED === "true";
+const TEST = OMR_ENABLED;
 
 export default function OmrUploadStatus() {
   const { id } = useParams<{ id: string }>();

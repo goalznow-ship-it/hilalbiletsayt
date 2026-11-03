@@ -17,3 +17,7 @@ venv
 .pytest_cache
 var/omr/
 .DS_Store
+
+# Playwright
+e2e/test-results/
+e2e/playwright-report/

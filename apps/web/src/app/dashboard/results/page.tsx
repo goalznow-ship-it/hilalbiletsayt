@@ -111,7 +111,7 @@ export default function ResultsPage() {
                     <td>
                       <Button
                         variant={row.publishedAt ? "outline" : "default"}
-                        className="min-h-11"
+                        className="min-h-[44px]"
                         disabled={!!busy || (!row.publishedAt && (row.review > 0 || row.processing > 0 || row.completed === 0))}
                         onClick={() => toggle(row)}
                         aria-label={`${row.code} nəticələrini ${row.publishedAt ? "gizlət" : "dərc et"}`}

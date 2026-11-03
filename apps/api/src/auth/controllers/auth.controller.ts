@@ -11,7 +11,8 @@ import { JwtAuthGuard } from "../guards/jwt-auth.guard";
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  // Brute-force protection per client address; raise only for test stacks.
+  @Throttle({ default: { limit: Number(process.env.AUTH_LOGIN_RATE_LIMIT_PER_MINUTE ?? 10) || 10, ttl: 60000 } })
   @Public()
   @Post("login")
   @ApiOperation({ summary: "User login" })

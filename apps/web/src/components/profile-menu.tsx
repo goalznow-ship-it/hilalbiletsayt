@@ -24,17 +24,17 @@ export function ProfileMenu() {
           <Button
             variant="ghost"
             className="profile-trigger"
-            aria-label="Hesab menyusu"
           />
         }
       >
         <span className="user-summary">
-          <span className="avatar">{initials}</span>
+          <span className="avatar" aria-hidden="true">{initials}</span>
           <span className="user-summary-copy">
             <strong>{user.fullName}</strong>
             <span>{roleLabels[user.role ?? ""] ?? "İstifadəçi"}</span>
           </span>
         </span>
+        <span className="sr-only"> — hesab menyusu</span>
         <ChevronDown size={13} aria-hidden="true" />
       </Menu.Trigger>
       <Menu.Portal>

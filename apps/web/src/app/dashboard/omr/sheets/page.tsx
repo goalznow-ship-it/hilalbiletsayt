@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { OMR_ENABLED } from "@/lib/features";
 import { useState, type FormEvent } from "react";
 import { useSession } from "@/components/session-provider";
 
 type Sheet = { id: string; templateVersion?: string };
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
-const TEST = process.env.NEXT_PUBLIC_OMR_TEST_UPLOAD_ENABLED === "true";
+const TEST = OMR_ENABLED;
 
 export default function SheetsPage() {
   const { user, request, downloadPdf } = useSession();
