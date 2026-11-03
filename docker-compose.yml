@@ -1,135 +1,154 @@
+# Hilal Bilet Sistemi — full stack.
+#
+#   cp .env.example .env && ./scripts/generate-secrets.sh .env
+#   docker compose --profile production up -d --build
+#
+# Only the `proxy` service (profile "production") publishes ports. Everything
+# else talks over the private compose network. Secrets have no defaults: the
+# stack refuses to start until they are set (see .env.example).
+name: hilal
+
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.6-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-hilal}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hilal}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-hilal}
-    ports:
-      - "5433:5432"
+      TZ: UTC
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hilal} -d ${POSTGRES_DB:-hilal}"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 20
 
+  # Reserved for queues/caching; the application does not use it yet.
   redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     restart: unless-stopped
-    # Internal networking only - port not published to host
-    # To publish for local dev: add - "${REDIS_PORT:-6379}:6379" above
-    volumes:
-      - redis_data:/data
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  rustfs:
-    image: rustfs/rustfs:latest
-    restart: unless-stopped
-    command: /data
-    environment:
-      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:?Set credentials in .env}
-      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:?Set credentials in .env}
-      RUSTFS_ADDRESS: "0.0.0.0:9000"
-      RUSTFS_CONSOLE_ADDRESS: "0.0.0.0:9001"
-      RUSTFS_CONSOLE_ENABLE: "true"
-      RUSTFS_OBS_LOGGER_LEVEL: error
-    ports:
-      - "${RUSTFS_API_PORT:-9000}:9000"
-      - "${RUSTFS_CONSOLE_PORT:-9001}:9001"
-    volumes:
-      - rustfs_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
-
-  api:
+  # One-shot: applies Prisma migrations, then exits 0. The API waits for it.
+  migrate:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    restart: unless-stopped
-    ports:
-      - "${API_PORT:-3001}:3001"
+    image: hilal-api:${IMAGE_TAG:-local}
+    restart: "no"
+    command: ["node_modules/.bin/prisma", "migrate", "deploy"]
     environment:
-      NODE_ENV: production
-      PORT: ${API_PORT:-3001}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-hilal}:${POSTGRES_PASSWORD:-hilal}@postgres:5432/${POSTGRES_DB:-hilal}
-      POSTGRES_USER: ${POSTGRES_USER:-hilal}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hilal}
-      POSTGRES_DB: ${POSTGRES_DB:-hilal}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
-      JWT_SECRET: ${JWT_SECRET:-your-very-secure-secret-at-least-32-characters-long}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
-      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
-      OMR_STORAGE_DIR: ${OMR_STORAGE_DIR:-var/omr}
-      OMR_STORAGE_DRIVER: ${OMR_STORAGE_DRIVER:-local}
-      RUSTFS_ENDPOINT: http://rustfs:9000
-      RUSTFS_BUCKET: ${RUSTFS_BUCKET:-hilal-omr}
-      RUSTFS_REGION: ${RUSTFS_REGION:-us-east-1}
-      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
-      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
-      OMR_WORKER_URL: http://worker:8000
-      OMR_WORKER_SECRET: ${OMR_WORKER_SECRET}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hilal}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hilal}
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
+
+  api:
+    image: hilal-api:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hilal}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hilal}
+      CORS_ORIGIN: ${PUBLIC_URL:?Set PUBLIC_URL in .env}
+      # Client IPs arrive via proxy -> web -> api on private networks only.
+      API_TRUSTED_PROXIES: loopback,uniquelocal
+      API_RATE_LIMIT_PER_MINUTE: ${API_RATE_LIMIT_PER_MINUTE:-300}
+      AUTH_LOGIN_RATE_LIMIT_PER_MINUTE: ${AUTH_LOGIN_RATE_LIMIT_PER_MINUTE:-10}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      QR_SIGNING_SECRET: ${QR_SIGNING_SECRET:?Set QR_SIGNING_SECRET in .env}
+      OMR_WORKER_URL: http://worker:8000
+      OMR_WORKER_SECRET: ${OMR_WORKER_SECRET:?Set OMR_WORKER_SECRET in .env}
+      OMR_STORAGE_DIR: /var/lib/hilal/omr
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BOOTSTRAP_BRANCH_CODE: ${BOOTSTRAP_BRANCH_CODE:-MERKEZ}
+      BOOTSTRAP_BRANCH_NAME: ${BOOTSTRAP_BRANCH_NAME:-Mərkəzi ofis}
+    volumes:
+      - omr_data:/var/lib/hilal/omr
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
         condition: service_healthy
-      rustfs:
+      worker:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3001/api/health', r => { let d=''; r.on('data', c => d+=c); r.on('end', () => process.exit(0)) }).on('error', () => process.exit(1))"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health').then(r=>r.json()).then(b=>process.exit(b.database==='connected'?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
 
   worker:
     build:
       context: ./services/omr-worker
       dockerfile: Dockerfile
+    image: hilal-omr-worker:${IMAGE_TAG:-local}
     restart: unless-stopped
-    ports:
-      - "${WORKER_PORT:-8000}:8000"
     environment:
-      PYTHONUNBUFFERED: 1
-      TESSDATA_PREFIX: /usr/share/tesseract-ocr/5/tessdata
-      OMR_WORKER_URL: http://worker:8000
-      OMR_WORKER_SECRET: ${OMR_WORKER_SECRET}
-      RUSTFS_ENDPOINT: http://rustfs:9000
-      RUSTFS_BUCKET: ${RUSTFS_BUCKET:-hilal-omr}
-      RUSTFS_REGION: ${RUSTFS_REGION:-us-east-1}
-      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
-      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
-    depends_on:
-      api:
-        condition: service_healthy
+      OMR_WORKER_SECRET: ${OMR_WORKER_SECRET:?Set OMR_WORKER_SECRET in .env}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+    image: hilal-web:${IMAGE_TAG:-local}
     restart: unless-stopped
-    ports:
-      - "${WEB_PORT:-3000}:3000"
     environment:
       NODE_ENV: production
       PORT: 3000
       HOSTNAME: 0.0.0.0
-      API_ORIGIN: http://api:3001
     depends_on:
       api:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  # TLS-terminating reverse proxy; the only service with published ports.
+  # SITE_ADDRESS=bilet.example.az enables automatic Let's Encrypt certificates;
+  # SITE_ADDRESS=:80 serves plain HTTP (local verification only).
+  proxy:
+    image: caddy:2.8.4-alpine
+    profiles: ["production"]
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?Set SITE_ADDRESS in .env}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
 
 volumes:
   postgres_data:
-  redis_data:
-  rustfs_data:
+  omr_data:
+  caddy_data:
+  caddy_config:

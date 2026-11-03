@@ -1,0 +1,28 @@
+{
+	# Admin API stays inside the container (used by the health check).
+	admin 127.0.0.1:2019
+}
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# OMR uploads: up to 4 files, 50 MB in total.
+	request_body {
+		max_size 60MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(self), microphone=(), geolocation=()"
+		-Server
+	}
+
+	# API documentation is never exposed through the proxy.
+	@docs path /api/docs /api/docs/*
+	respond @docs 404
+
+	reverse_proxy web:3000
+}

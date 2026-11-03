@@ -5,14 +5,11 @@ RUN corepack enable && \
 
 WORKDIR /app
 
-# Install build dependencies including OpenSSL
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy package files and install dependencies with retries
-# Copy the complete pnpm workspace
 COPY . .
 
 RUN pnpm install --frozen-lockfile \
@@ -31,21 +28,24 @@ ENV NODE_ENV=production
 ENV PORT=3001
 ENV API_HOST=0.0.0.0
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app/apps/api
 
-# Copy only necessary node_modules from build stage
 COPY --from=build /app/node_modules /app/node_modules
 COPY --from=build /app/apps/api/node_modules ./node_modules
-
-# Copy only the api dist and package.json
 COPY --from=build /app/apps/api/dist ./dist
 COPY --from=build /app/apps/api/package.json ./package.json
+# Migrations and Prisma config for the one-shot `migrate` service.
+COPY --from=build /app/apps/api/prisma ./prisma
+COPY --from=build /app/apps/api/prisma.config.ts ./prisma.config.ts
 
-# Create only the storage directory needed and assign ownership
-RUN mkdir -p storage && \
-    chown node:node storage
+# OMR scan storage; a named volume mounted here inherits this ownership.
+RUN mkdir -p /var/lib/hilal/omr && chown node:node /var/lib/hilal/omr
 
-# Switch to non-root user
 USER node
 
 EXPOSE 3001
