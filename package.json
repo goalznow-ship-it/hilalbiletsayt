@@ -9,10 +9,16 @@
     "lint": "pnpm --recursive lint",
     "typecheck": "pnpm --recursive typecheck",
     "db:migrate": "pnpm --filter @hilal/api prisma:migrate",
-    "db:generate": "pnpm --filter @hilal/api prisma:generate"
+    "db:generate": "pnpm --filter @hilal/api prisma:generate",
+    "test": "pnpm --recursive --if-present test"
   },
   "engines": {
     "node": ">=20",
     "pnpm": ">=9"
+  },
+  "pnpm": {
+    "overrides": {
+      "multer": ">=2.5.0 <3"
+    }
   }
 }
