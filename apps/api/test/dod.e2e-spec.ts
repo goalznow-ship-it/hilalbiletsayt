@@ -166,6 +166,17 @@ describe("DoD: branch-isolated seller sales", () => {
     expect(statsB.body).toEqual([]);
   });
 
+  it("seller registers a buyer in own branch only", async () => {
+    const created = await http().post("/api/candidates").set("Authorization", `Bearer ${tokens.sellerA}`)
+      .send({ full_name: "Kassa Alıcısı" }).expect(201);
+    expect(created.body.branch_id).toBe(ids.branchA);
+    expect(created.body.candidate_number).toMatch(/^QD[A-Z2-9]{10}$/);
+    await http().post("/api/candidates").set("Authorization", `Bearer ${tokens.sellerA}`)
+      .send({ full_name: "Başqa filial", branch_id: ids.branchB }).expect(403);
+    // Sellers create buyers but do not browse the candidate registry.
+    await http().get("/api/candidates").set("Authorization", `Bearer ${tokens.sellerA}`).expect(403);
+  });
+
   it("seller confirms payment for own branch only", async () => {
     await http().put(`/api/ticket/${ids.ticketA}/payment`).set("Authorization", `Bearer ${tokens.sellerA}`).expect(200);
     const ticket = await prisma.ticket.findUniqueOrThrow({ where: { id: ids.ticketA } });

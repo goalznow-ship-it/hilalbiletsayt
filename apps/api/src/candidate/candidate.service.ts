@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { randomBytes } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import {
@@ -14,6 +15,7 @@ import {
   assertBranchAllowed,
   getBranchIds,
   isCentralAdmin,
+  getSalesBranchIds,
 } from "../auth/authorization";
 import {
   PaginationQuery,
@@ -57,14 +59,14 @@ type CandidateRecord = {
   registrations?: CandidateRegistrationRecord[];
 };
 
+// The candidate number is the second factor of the public result lookup, so
+// it must not be predictable from the creation time.
+const CANDIDATE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function generateCandidateNumber(): string {
-  const time = Date.now().toString(36).toUpperCase();
-  const random = Math.random()
-    .toString(36)
-    .slice(2, 6)
-    .toUpperCase()
-    .padEnd(4, "0");
-  return `QD${time}${random}`;
+  const bytes = randomBytes(10);
+  let suffix = "";
+  for (const byte of bytes) suffix += CANDIDATE_ALPHABET[byte % 32];
+  return `QD${suffix}`;
 }
 
 function normalizeEmail(email: string | null | undefined): string | null {
@@ -152,13 +154,16 @@ export class CandidateService {
       return branchId;
     }
 
-    const allowedBranchIds = getBranchIds(user);
+    // Sellers register buyers at the desk, so creation follows sales branches.
+    const allowedBranchIds = getSalesBranchIds(user);
     if (allowedBranchIds.length === 0) {
       throw new ForbiddenException("Filial təyinatınız yoxdur");
     }
 
     const selectedBranchId = branchId ?? allowedBranchIds[0];
-    assertBranchAllowed(user, selectedBranchId);
+    if (!allowedBranchIds.includes(selectedBranchId)) {
+      throw new ForbiddenException("Bu filial üçün icazəniz yoxdur");
+    }
     await this.assertBranchExists(selectedBranchId);
     return selectedBranchId;
   }

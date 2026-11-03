@@ -58,6 +58,7 @@ export class CandidateController {
   }
 
   @Post()
+  @Roles([...CANDIDATE_MANAGER_ROLES, "SELLER"])
   @ApiOperation({ summary: "Create a new candidate" })
   @ApiResponse({ status: 201, description: "Candidate created successfully" })
   @ApiResponse({ status: 409, description: "Duplicate email" })

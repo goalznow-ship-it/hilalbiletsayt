@@ -195,11 +195,21 @@ describe("Application HTTP e2e (test database)", () => {
     expect(response.body.data[0].full_name).toBe("HTTP Namizəd");
   });
 
-  it("forbids sellers from managing candidates", async () => {
-    await request(app.getHttpServer())
+  it("lets sellers register a buyer but not manage candidates", async () => {
+    const created = await request(app.getHttpServer())
       .post("/api/candidates")
       .set("Authorization", `Bearer ${sellerToken}`)
       .send({ full_name: "Satıcı Namizəd" })
+      .expect(201);
+    expect(created.body.branch_id).toBe(branchId);
+    await request(app.getHttpServer())
+      .get("/api/candidates")
+      .set("Authorization", `Bearer ${sellerToken}`)
+      .expect(403);
+    await request(app.getHttpServer())
+      .patch(`/api/candidates/${created.body.id}`)
+      .set("Authorization", `Bearer ${sellerToken}`)
+      .send({ full_name: "Dəyişdirilmiş" })
       .expect(403);
   });
 
@@ -421,7 +431,8 @@ describe("Application HTTP e2e (test database)", () => {
       .set("Authorization", `Bearer ${managerToken}`)
       .expect(200);
 
-    expect(visible.body.total).toBe(2);
+    // Two candidates from earlier tests plus the buyer registered by the seller.
+    expect(visible.body.total).toBe(3);
     expect(
       visible.body.data.map((candidate: { id: string }) => candidate.id),
     ).toContain(candidateId);
