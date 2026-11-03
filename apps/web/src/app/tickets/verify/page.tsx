@@ -20,7 +20,8 @@ export default function VerifyPage() {
         onSubmit={(event) => {
           event.preventDefault();
           const token = value.trim().split("/tickets/verify/").pop() || "";
-          if (!/^[A-Za-z0-9_-]{43}$/.test(token)) {
+          // Signed QR payload: <token>.<signature>
+          if (!/^[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}$/.test(token)) {
             setError("Biletdəki QR yoxlama keçidini tam daxil edin.");
             return;
           }

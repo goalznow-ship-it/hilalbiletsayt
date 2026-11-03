@@ -12,7 +12,7 @@ import {
   SheetDescription,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { navigation } from "@/lib/navigation";
+import { navigation, visibleNavigation } from "@/lib/navigation";
 import { ProfileMenu } from "@/components/profile-menu";
 import { useSession } from "@/components/session-provider";
 
@@ -36,13 +36,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     pathname === "/tickets/verify" ||
     pathname === "/login" ||
     pathname.startsWith("/auth/") ||
-    pathname.startsWith("/tickets/verify/")
+    pathname.startsWith("/tickets/verify/") ||
+    pathname === "/results"
   )
     return <>{children}</>;
   const current =
     navigation.find((item) => pathname === item.href) ?? navigation[0];
   const central = (user?.roles ?? [user?.role]).some((role) =>
     ["SUPER_ADMIN", "CENTRAL_ADMIN"].includes(role ?? ""),
+  );
+  const items = visibleNavigation(
+    (user?.roles ?? [user?.role]).filter((role): role is string => !!role),
   );
   const sidebar = (
     <>
@@ -64,30 +68,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </Link>
       <div className="sidebar-caption">İDARƏETMƏ</div>
       <nav className="main-nav" aria-label="Əsas naviqasiya">
-        {navigation.map(({ href, label, icon: Icon }, index) => (
+        {items.map(({ href, label, icon: Icon, group, upcoming }, index) => (
           <Fragment key={href}>
-            {index === 3 && (
+            {index > 0 && group !== items[index - 1].group && (
               <div className="sidebar-caption nav-group-heading">
-                İMTAHAN PROSESLƏRİ
+                {group === "exam" ? "İMTAHAN PROSESLƏRİ" : "SİSTEM"}
               </div>
-            )}
-            {index === 8 && (
-              <div className="sidebar-caption nav-group-heading">SİSTEM</div>
             )}
             <Link
               href={href}
-              key={href}
               onClick={() => setOpen(false)}
-              className={`nav-link ${["/dashboard/omr", "/dashboard/results", "/dashboard/settings"].includes(href) ? "is-upcoming" : ""} ${pathname === href ? "is-active" : ""}`}
+              className={`nav-link ${upcoming ? "is-upcoming" : ""} ${pathname === href ? "is-active" : ""}`}
               aria-current={pathname === href ? "page" : undefined}
             >
               <Icon aria-hidden="true" />
               <span>{label}</span>
-              {[
-                "/dashboard/omr",
-                "/dashboard/results",
-                "/dashboard/settings",
-              ].includes(href) && (
+              {upcoming && (
                 <>
                   <span className="nav-dot" aria-hidden="true" />
                   <span className="sr-only"> — Tezliklə</span>

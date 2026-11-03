@@ -31,7 +31,9 @@ export default function TicketsPage() {
   const central = user?.roles?.some((role) =>
     ["SUPER_ADMIN", "CENTRAL_ADMIN"].includes(role),
   );
-  const cashier = central || user?.roles?.includes("BRANCH_MANAGER");
+  const cashier =
+    central ||
+    user?.roles?.some((role) => ["BRANCH_MANAGER", "SELLER"].includes(role));
   useEffect(() => {
     if (!user) return;
     let active = true;

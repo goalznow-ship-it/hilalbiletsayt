@@ -2096,3 +2096,78 @@ input[type="checkbox"] {
   .public-ticket { box-shadow: none; break-inside: avoid; font-size: 11pt; padding: 20px; }
   .public-ticket dl { grid-template-columns: 1fr 2fr; }
 }
+
+/* Entry scan, day closure, results */
+.scan-card {
+  max-width: 560px;
+}
+.scan-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  max-width: 560px;
+  border-width: 2px;
+}
+.scan-result > svg {
+  flex: none;
+  width: 36px;
+  height: 36px;
+}
+.scan-result h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+.scan-ok {
+  background: var(--success-surface);
+  border-color: var(--success);
+  color: var(--success);
+}
+.scan-error {
+  background: var(--error-surface);
+  border-color: var(--destructive);
+  color: var(--destructive);
+}
+.metric-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.metric-grid dt {
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+}
+.metric-grid dd {
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+.form-row > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.data-table-wrap {
+  overflow-x: auto;
+}
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.public-result {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 32px 16px;
+}
