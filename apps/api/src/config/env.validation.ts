@@ -54,7 +54,7 @@ const envSchema = z.object({
   }
 
   if (config.NODE_ENV === "production") {
-    for (const key of ["JWT_SECRET", "OMR_WORKER_SECRET", "QR_SIGNING_SECRET", "BOOTSTRAP_ADMIN_PASSWORD"] as const) {
+    for (const key of ["DATABASE_URL", "JWT_SECRET", "OMR_WORKER_SECRET", "QR_SIGNING_SECRET", "BOOTSTRAP_ADMIN_PASSWORD"] as const) {
       if (isPlaceholder(config[key])) {
         context.addIssue({
           code: "custom",

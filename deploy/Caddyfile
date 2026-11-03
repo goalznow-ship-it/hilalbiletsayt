@@ -18,6 +18,7 @@
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(self), microphone=(), geolocation=()"
 		-Server
+		-X-Powered-By
 	}
 
 	# API documentation is never exposed through the proxy.

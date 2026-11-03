@@ -76,6 +76,7 @@ describe("validateEnv production secrets", () => {
   it("rejects the old compose default and .env.example placeholders", () => {
     expect(() => validateEnv({ ...production, JWT_SECRET: "your-very-secure-secret-at-least-32-characters-long" })).toThrow(/JWT_SECRET/);
     expect(() => validateEnv({ ...production, OMR_WORKER_SECRET: "change-me-omr-worker-secret-0000000000" })).toThrow(/OMR_WORKER_SECRET/);
+    expect(() => validateEnv({ ...production, DATABASE_URL: "postgresql://hilal:change-me-postgres-password@postgres:5432/hilal" })).toThrow(/DATABASE_URL/);
   });
 
   it("requires bootstrap admin email and password together", () => {

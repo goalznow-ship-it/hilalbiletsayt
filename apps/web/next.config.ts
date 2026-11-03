@@ -4,6 +4,7 @@ import type { NextConfig } from "next";
 const apiOrigin = process.env.API_ORIGIN ?? "http://127.0.0.1:3001";
 const nextConfig: NextConfig = {
   output: "standalone",
+  poweredByHeader: false,
   outputFileTracingRoot: path.resolve(process.cwd(), "../.."),
   /* config options here */
   experimental: { turbopackPluginRuntimeStrategy: "workerThreads" },
