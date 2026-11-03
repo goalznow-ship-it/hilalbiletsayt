@@ -1,0 +1,17 @@
+{
+  "name": "@hilal/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cross-service checks: Playwright smoke/a11y and the concurrent sales load test",
+  "scripts": {
+    "load": "node load/concurrent-sales.mjs",
+    "smoke": "playwright test",
+    "lint": "node --check lib/api.mjs && node --check load/concurrent-sales.mjs"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.64.1",
+    "autocannon": "8.0.0"
+  }
+}
