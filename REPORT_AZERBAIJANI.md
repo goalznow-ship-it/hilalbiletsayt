@@ -1,103 +1,76 @@
-# HILAL BİLET SİSTEMİ — MILESTONE 4 FINAL HARDENing RAPORU
+# Hilal Bilet Sistemi — istehsala hazırlıq hesabatı
 
-## tarix: 2026-10-24
+Tarix: 2026-11-04. Bu mərhələ texniki tapşırığın 5–7-ci bölmələri (testlər, CI,
+sənədləşmə, "hazırdır" meyarları, hesabat forması) əsasında aparılıb.
+Tapşırığın 1–4-cü bölmələri repozitoriyada yoxdur və istifadə olunmayıb.
+Əvvəlki hesabat (Milestone 4) köhnəlmişdi; tarixçə git-də saxlanılır.
 
-### əməliyyat statusı
-Milestone 4 (Candidate Management and Registration) tamamlanıb və certifika edilmişdir. Bütün backend proqramlığı, Prisma və migrations, API tipekontrolı, lint, build və PostgreSQL integrasiya testləri successfully icra edilmişdir.
+## Görülən işlər
 
-### əməliyyatlar
+* **Satış və filial təcrid olunması.** Satıcı yalnız öz filialında satır,
+  ödəniş qəbul edir və alıcını qeydiyyata alır; başqa filialın satışlarını
+  görmür. Bütün yoxlamalar serverdə aparılır.
+* **Tutum və dublikatlar.** Sessiyanın tutumu və "bir namizəd — bir sessiyada bir
+  aktiv bilet" qaydası verilənlər bazasının özündə (trigger və unikal indeks)
+  qorunur. Eyni anda yüzlərlə satış cəhdi belə artıq bilet yaratmır.
+* **QR kodun saxtalaşdırılmaması.** Biletin QR kodu HMAC-SHA256 ilə imzalanır;
+  dəyişdirilmiş və ya uydurulmuş kod rədd edilir.
+* **Girişdə yoxlama.** "Girişdə yoxlama" ekranı: hər bilet yalnız bir dəfə
+  qəbul olunur, ikinci skan rədd edilir.
+* **Günün bağlanması.** Filial rəhbəri günü bağlayır; həmin günün satışları,
+  ödənişləri və ləğvləri dondurulur (verilənlər bazası səviyyəsində). İmtahan
+  günü girişdə qəbul işləməyə davam edir.
+* **Nəticələrin dərci.** Yoxlama növbəsi boş olmadan nəticə dərc edilmir;
+  dərc olunmamış nəticə heç kimə göstərilmir. İctimai `/results` səhifəsi
+  bilet kodu (və ya QR) + namizəd nömrəsi tələb edir, IP üzrə dəqiqədə 10
+  sorğu ilə məhdudlaşır və səhv məlumatda həmişə eyni cavab verir.
+* **OMR.** Tamamilə boş vərəq yoxlama növbəsinə göndərilir; OMR ekranları
+  istehsalda da açıqdır (əvvəl test bayrağı ilə gizlədilmişdi).
+* **İlk administrator** `.env` faylından bir dəfə yaradılır.
+* **Təhlükəsiz standartlar.** İstehsalda gizli açarlar məcburidir, nümunə
+  dəyərlərlə sistem işə düşmür; Swagger istehsalda bağlıdır; xaricə yalnız
+  proksi (avtomatik HTTPS) açıqdır.
+* **Ehtiyat nüsxə və bərpa** skriptləri və bərpa təlimi.
+* **CI/CD**: GitHub Actions boru kəməri və deploy şablonu.
+* **Sənədlər**: README, DEPLOYMENT, OPERATIONS, OMR, API və dörd rol üzrə
+  Azərbaycan dilində təlimatlar (`docs/guides/`).
 
-#### 1. e-poçt einziglik politikası
-- **DB-enforced case-insensitive uniqueness**: `candidates` sisteri `LOWER(email)` partially unique index `(WHERE email IS NOT NULL)`. Boş e-poçtlar qorunub.
-- **Servis normalizasiya**: Artıq daxil edilən e-poçtlar `.trim().tolowerCase()` ilə hazırlanır, bu da əksinəri qaytupları blokla.
-- **Xəta mesajı**: `"Bu e-poçt ünvanı ilə namizəd artıq mövcuddur"` (409 Conflict).
-- **Migrations**: `20261025010000_candidate_email_case_insensitive_unique` migrations `hilal_test` DB-ye applied. `prisma migrate diff` boş cavab verdi (schema actual).
-- **Unit test**: Duplicate/unicode email create testlər keçdi.
+## Yoxlamaların nəticələri
 
-#### 2. Filialla bağlı görgülük (branch-scoped candidate visibility)
-- **Nullable `candidates.branch_id`**: `UUID`, `ON DELETE SET NULL`, indexed.
-- **Central admins**: Bütün candidate-lara baxa Baxa bilərlər.
-- **Branch managers**: Branch assigned candidate-lara və ya o branch-inə qeydiyyatdan keçmiş registration-lara baxa Baxa bilərlər.
-- **Creation/Edit**: Non-central users avtomatik olaraq yetkilendirilen branch-a müəyyən olunur; yanlış branch seçimi reddedilir. Central `branch_id` dəyişməyi oxuya bilər.
-- **Migration**: `20261025011000_candidate_branch_scope` — column əlavə, FK, index.
-- **Unit test**: Unregistered candidate visibility, cross-branch access, manager branch assignment testlər keçdi.
+| Yoxlama | Nəticə |
+| --- | --- |
+| Tip yoxlaması, lint, build | uğurlu (exit 0) |
+| API unit testləri | 113 / 113 |
+| API e2e testləri (ayrıca test bazası) | 82 / 82 |
+| Web testləri | 39 / 39 |
+| OMR testləri (təmiz, bulanıq, fırlanmış, iki işarəli, boş vərəq) | 20 / 20 |
+| Yük testi: 600 sorğu, 50 yer | düz 50 bilet, dublikat yoxdur |
+| Playwright brauzer ssenarisi + əlçatanlıq (axe) | 24 / 24 |
+| Təmiz klondan istehsal profili | 7 xidmət sağlam |
+| Ehtiyat nüsxə → bərpa təlimi | məlumatlar eynidir |
+| Asılılıqların auditi (istehsal) | zəiflik yoxdur |
 
-#### 3. Dayanıq audit qeydiyyatı (durable audit logging)
-- **`audit_logs` table**: `id`, `actorId`, `action`, `entityType`, `entityId`, `metadata` (JsonB), `timestamp`.
-- **Recursive redaction**: Parol, token, secret, email, phone, full_name və yaxud digər sensitive keylər `[REDACTED]` iləinə əvəz olunur.
-- **Atomic tx**: Candidate create/update, registration create/cancel, session transition-lar əlavə tx-də baş qaldı. Audit səzlənmədiyinə görə business error göstərilib.
-- **Migration**: `20261025012000_add_audit_logs` — table, tre indexes.
-- **Unit test**: Persistence və redaction pattern testlər keçdi.
+## Hazırlıq meyarları
 
-#### 4. İmtahan sesi life cycle (examination session lifecycle)
-- **Valid transitionlar**:
-  - `PLANNED → OPEN`, `CANCELLED`
-  - `OPEN → CLOSED`, `CANCELLED`
-  - `CLOSED`/`CANCELLED` terminal status
-- **Aktiv qeydiyyatlar**: Sesi ləğv etməyə görə RED - `activeCount > 0` bəskin.
-- **Kapasitet**: Əlavə capacity RED-edərək aktiv qeydiyyat sayından az ola bilməz.
-- **Row lock**: `SELECT ... FOR UPDATE` tx-lər capacity və lifecycle operation-lari serialize edir.
-- **Audit**: Session create/status change-lar audit_logs-da yozulur.
-- **Branch manager**: Sesi create/close/cancel etmək @Roles(`[...CENTRAL_ADMIN_ROLES]`) vasitəsilə bloklanır.
-- **Migration**: Examination session lifecycle/migrations mövcuddur, `prisma migrate status` "up to date" qaytarır.
+16 meyardan 15-i **PASS**, 1-i **PARTIAL**: CI faylı hazırdır, lakin GitHub-da
+hələ işə salınmayıb (kod GitHub-a göndərilməyib). Ətraflı sübutlar:
+`docs/IMPLEMENTATION_STATUS.md`.
 
-#### 5. API request consistency (API sirova everywhere consistency)
-- **Duplicate `/api` prefix-lər**: Barcha frontend `/api/candidates`, `/api/exams` və s. yol yolğandır; onlar rectifika edildi, `request()` helper `/candidates`, `/exams`, `/branches`, `/users`, `/registrations` rutasiyaları artıq backend routed-lar ile consistently istifadə edilir.
-- **Response shape**: `{data}` arrays, və ya doğrudan objectContractlar backend agreementinə uyğun olarak frontend-də düzəliş edilib.
-- **Unit test**: 9 request-helper unit testləri keçdi.
+## Riskler və məhdudiyyətlər
 
-#### 6. Final verification (testlər)
-- **Unit tests**: 51 test, 6 file, exit 0.
-- **Integration/HTTP tests**: 46 test, 2 file (hilal_test DB), exit 0.
-- **Prisma validate**: 0, generate: 0, migrate status: "up to date", diff: empty migration.
-- **API TypeScript**: 0 (pass).
-- **API oxlint**: 0 errors, 0 warnings.
-- **API nest build**: 0 (pass).
-- **Web tsc**: 0 (pass).
-- **Web eslint**: 0 errors (pre-existing 5 warnings outer changed flow).
-- **Web next build**: 0 (pass).
-- **Auth form tests**: 14 passed (node --experimental-strip-types).
-- **Request helper tests**: 9 passed.
+* OMR test vərəqləri sintetikdir; ilk real imtahandan əvvəl hər filialın
+  printer/skaner nümunələri ilə yoxlanmalıdır.
+* Redis istifadə olunmur; OMR emalı növbəsiz, sinxron işləyir.
+* Hesabatlar hələlik ümumi statistika və günün yekunu ilə məhdudlaşır.
+* Bir NAT ünvanı arxasındakı ofislər sorğu limitini bölüşür.
 
-### dəyişən fayllar
+## Real serverdə əl ilə görüləcək işlər
 
-**API (Prisma & Schema)**:
-- `apps/api/prisma/schema.prisma` — Candidate branch_id, AuditLog model
-- `apps/api/prisma/migrations/20261025010000_candidate_email_case_insensitive_unique/migration.sql`
-- `apps/api/prisma/migrations/20261025011000_candidate_branch_scope/migration.sql`
-- `apps/api/prisma/migrations/20261025012000_add_audit_logs/migration.sql`
-
-**API (source code)**:
-- `apps/api/src/audit/audit.service.ts` — DB-backed AuditService redaction
-- `apps/api/src/audit/audit.service.spec.ts` — Unit tests
-- `apps/api/src/candidate/candidate.service.ts` — Branch-aware, email normalize
-- `apps/api/src/candidate/candidate.dto.ts` — branch_id field
-- `apps/api/src/candidate/candidate.service.unit.spec.ts` — Branch tests
-- `apps/api/src/examination/examination.session.dto.ts` — SessionStatus DTO
-- `apps/api/src/examination/examination.session.service.ts` — Lifecycle service
-- `apps/api/src/examination/examination.session.controller.ts` — Central-admin guards
-- `apps/api/src/examination.examination.session.service.unit.spec.ts` — Lifecycle tests
-- `apps/api/src.examination.examination.module.ts` — AuditModule
-- `apps/api/src.user.user.service.ts` — actorId threading
-- `apps/api/src.user.user.controller.ts` — @CurrentUser() on mutations
-- `apps/api/test/app.e2e-spec.ts` — Session lifecycle, audit, cross-branch tests
-- `apps/api/test/candidate-registration.e2e-spec.ts` — Duplicate email, branch scope, audit
-
-**Frontend**:
-- `apps/web/src/app/candidates/page.tsx` — Branch forms, session lifecycle UI
-- `apps/web/src/app/examinations/page.tsx` — Session open/close/cancel UI
-- `apps/web/src/components/examinations/exam-dialog.tsx` — Lint fix
-- `apps/web/src/lib/request.ts` — Shared request helper
-- `apps/web/tests/request.test.mjs` — 9 tests
-
-**Mətn və docs**:
-- `docs/IMPLEMENTATION_STATUS.md` — Updated verification results
-
-### qalancak blokklər
-- Audit logging durability — DB-verified, end-user pg client not launched buraxıcısı.
-- Browser automation — Oxşar layihədə click/screenshots yox olub.
-- Ticket sales, OMR, reporting — Milestone 5-9 yoxlanmadı (durdursuz).
-- Development database `hilal` artıq 7 migrationla actual (additive, heç silinməmedi).
-
-### cavan
-Heç bir `any`, `@ts-ignore`, yoki azalan authorization implemented edilməyib. Bütün dəyişmələr additive migration vasitəsilə, veriqən məlumatların silinməsi čiçin yoq. PostgreSQL `hilal_test` izoltik databaseinə yoxlanıldı və bütöv test siyahısı (51 unit + 46 integration) green cavabla abideydi. Next.js production build istiqra bərpa etdi. Milestone 4 certifika edilmişdir.
+1. DNS qeydi (məs. `bilet.example.az`) və `.env`-də `SITE_ADDRESS`,
+   `PUBLIC_URL` — sertifikat avtomatik alınır.
+2. `./scripts/generate-secrets.sh .env`, `.env`-in parol menecerində surəti.
+3. İlk administratorla giriş, sonra `BOOTSTRAP_ADMIN_PASSWORD`-un silinməsi.
+4. Hər filialda bilet çapı və cavab vərəqinin (100 % A4) sınaq çapı.
+5. Real skan nümunələri ilə OMR yoxlaması.
+6. Gündəlik ehtiyat nüsxənin serverdən kənara köçürülməsi, rüblük bərpa təlimi.
+7. GitHub-da `production` mühitinin gizli açarları (deploy şablonu üçün).
