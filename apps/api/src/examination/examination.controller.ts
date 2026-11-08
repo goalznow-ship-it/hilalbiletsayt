@@ -8,6 +8,8 @@ import {
   Param,
   Body,
   Patch,
+  Delete,
+  ParseUUIDPipe,
   Query,
   UseGuards,
 } from "@nestjs/common";
@@ -69,8 +71,8 @@ export class ExaminationController {
   @ApiOperation({ summary: "Update examination" })
   @ApiResponse({ status: 200, description: "Examination updated successfully" })
   @ApiResponse({ status: 404, description: "Examination not found" })
-  async update(@Param("id") id: string, @Body() dto: UpdateExamDto) {
-    return this.examinationService.update(id, dto);
+  async update(@Param("id", ParseUUIDPipe) id: string, @Body() dto: UpdateExamDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.examinationService.update(id, dto, user.userId);
   }
 
   @Roles([...CENTRAL_ADMIN_ROLES])
@@ -88,9 +90,9 @@ export class ExaminationController {
   @ApiResponse({ status: 404, description: "Examination not found" })
   async publish(
     @Param("id") id: string,
-    @Body("publishedBy") publishedBy: string,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.examinationService.publish(id, publishedBy);
+    return this.examinationService.publish(id, user.userId);
   }
 
   @Roles([...CENTRAL_ADMIN_ROLES])
@@ -108,8 +110,15 @@ export class ExaminationController {
   @ApiResponse({ status: 404, description: "Examination not found" })
   async archive(
     @Param("id") id: string,
-    @Body("archivedBy") archivedBy: string,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.examinationService.archive(id, archivedBy);
+    return this.examinationService.archive(id, user.userId);
+  }
+
+  @Delete(":id")
+  @Roles([...CENTRAL_ADMIN_ROLES])
+  @UseGuards(AuthGuard("jwt"), RolesGuard, BranchGuard)
+  remove(@Param("id", ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.examinationService.remove(id, user.userId);
   }
 }

@@ -5,6 +5,7 @@ import type { Request } from "express";
 import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Public } from "../decorators/public.decorator";
 import { JwtAuthGuard } from "../guards/jwt-auth.guard";
+import { LoginDto } from "../login.dto";
 
 @ApiTags("auth")
 @Controller("auth")
@@ -18,7 +19,7 @@ export class AuthController {
   @ApiOperation({ summary: "User login" })
   @ApiResponse({ status: 201, description: "Login successful" })
   @ApiResponse({ status: 401, description: "Invalid credentials" })
-  async login(@Body() loginDto: { email: string; password: string }) {
+  async login(@Body() loginDto: LoginDto) {
     const user = await this.authService.validateUser(
       loginDto.email,
       loginDto.password,

@@ -16,7 +16,7 @@ import type {
 const SESSION_TRANSITIONS: Record<string, readonly string[]> = {
   PLANNED: ["OPEN", "CANCELLED"],
   OPEN: ["CLOSED", "CANCELLED"],
-  CLOSED: [],
+  CLOSED: ["OPEN", "CANCELLED"],
   CANCELLED: [],
 };
 
@@ -181,6 +181,13 @@ export class ExaminationSessionService {
         throw new NotFoundException("Sessiya tapılmadı");
       }
 
+      const startsAt = data.startsAt === undefined ? session.startsAt : parseDate(data.startsAt, "Başlama vaxtı");
+      const endsAt = data.endsAt === undefined ? session.endsAt : parseDate(data.endsAt, "Bitiş vaxtı");
+      if (startsAt >= endsAt)
+        throw new BadRequestException("Başlama vaxtı bitiş vaxtından əvvəl olmalıdır");
+      if ((data.startsAt !== undefined || data.endsAt !== undefined) && startsAt <= new Date())
+        throw new BadRequestException("Sessiyanın yeni vaxtı gələcəkdə olmalıdır");
+
       let nextStatus = session.status;
       if (data.status && data.status !== session.status) {
         const allowedNext = SESSION_TRANSITIONS[session.status] ?? [];
@@ -228,7 +235,8 @@ export class ExaminationSessionService {
 
       const updated = await tx.examSession.update({
         where: { id },
-        data: { capacity: nextCapacity, status: nextStatus },
+        data: { capacity: nextCapacity, status: nextStatus, startsAt, endsAt,
+          venue: data.venue === undefined ? session.venue : data.venue.trim() || null },
       });
 
       const action =
@@ -245,6 +253,8 @@ export class ExaminationSessionService {
           from: session.status,
           to: updated.status,
           capacity: updated.capacity,
+          ...(data.startsAt !== undefined || data.endsAt !== undefined || data.venue !== undefined
+            ? { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), venue: updated.venue } : {}),
         },
         tx,
       );

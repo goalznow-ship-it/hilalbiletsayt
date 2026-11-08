@@ -122,8 +122,7 @@ export class UserService {
 
     if (filters?.roleId) {
       where.userBranchRoles = {
-        ...where.userBranchRoles,
-        some: { roleId: filters.roleId },
+        some: { ...where.userBranchRoles?.some, roleId: filters.roleId },
       };
     }
 
@@ -145,6 +144,7 @@ export class UserService {
         where,
         include: {
           userBranchRoles: {
+            ...(user && !isCentralAdmin(user) ? { where: { branchId: { in: getBranchIds(user) } } } : {}),
             include: { role: true, branch: true },
           },
         },
@@ -219,7 +219,7 @@ export class UserService {
       }
 
       if (
-        data.isActive === false &&
+        (data.isActive === false || (data.role !== undefined && data.role !== "SUPER_ADMIN")) &&
         existingUser.userBranchRoles.some(
           (entry) => entry.role.name === "SUPER_ADMIN",
         )
@@ -241,7 +241,20 @@ export class UserService {
         ...(data.email && { email: data.email }),
         ...(data.fullName && { fullName: data.fullName }),
         ...(data.isActive !== undefined && { isActive: data.isActive }),
+        ...(data.isActive === false && { tokenVersion: { increment: 1 } }),
       };
+
+      if (data.role !== undefined || data.branchIds !== undefined) {
+        const branchIds = [...new Set(data.branchIds ?? existingUser.userBranchRoles.map(entry => entry.branchId))];
+        if (!branchIds.length || await tx.branch.count({ where: { id: { in: branchIds }, isActive: true } }) !== branchIds.length)
+          throw new ForbiddenException("Aktiv filial seçin");
+        const roleIds = data.role
+          ? [(await tx.role.findUniqueOrThrow({ where: { name: data.role } })).id]
+          : [...new Set(existingUser.userBranchRoles.map(entry => entry.roleId))];
+        if (!roleIds.length) throw new ForbiddenException("Rol seçin");
+        await tx.userBranchRole.deleteMany({ where: { userId: id } });
+        await tx.userBranchRole.createMany({ data: branchIds.flatMap(branchId => roleIds.map(roleId => ({ userId: id, branchId, roleId }))) });
+      }
 
       const user = await tx.user.update({
         where: { id },
@@ -261,7 +274,7 @@ export class UserService {
         user.id,
         {
           email: user.email,
-          updatedFields: Object.keys(updateData),
+          updatedFields: Object.keys(data),
         },
         tx,
       );
@@ -315,7 +328,7 @@ export class UserService {
 
       const updatedUser = (await tx.user.update({
         where: { id },
-        data: { isActive },
+        data: { isActive, ...(!isActive && { tokenVersion: { increment: 1 } }) },
         include: {
           userBranchRoles: {
             include: { role: true, branch: true },
@@ -340,6 +353,7 @@ export class UserService {
 
   async assignBranches(userId: string, branchIds: string[], actorId?: string) {
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRawUnsafe("SELECT pg_advisory_xact_lock(724901)::text");
       // First get the user with existing branch roles
       const user = await tx.user.findUnique({
         where: { id: userId },
@@ -408,6 +422,7 @@ export class UserService {
 
   async assignRoles(userId: string, roleIds: string[], actorId?: string) {
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRawUnsafe("SELECT pg_advisory_xact_lock(724901)::text");
       const user = await tx.user.findUnique({
         where: { id: userId },
         include: {
@@ -421,7 +436,6 @@ export class UserService {
         throw new ForbiddenException("İstifadəçi tapılmadı");
       }
 
-      await tx.$queryRawUnsafe("SELECT pg_advisory_xact_lock(724901)::text");
       if (
         user.userBranchRoles.some(
           (entry) => entry.role.name === "SUPER_ADMIN",
@@ -539,7 +553,8 @@ export class UserService {
   }
 
   async resetPassword(userId: string, newPassword: string, actorId?: string) {
-    const user = await this.prisma.user.findUnique({
+    return this.prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({
       where: { id: userId },
     });
 
@@ -553,11 +568,11 @@ export class UserService {
     const passwordHash = await argon2.hash(newPassword);
 
     // Update password and increment token version to invalidate existing sessions
-    const updatedUser = (await this.prisma.user.update({
+    const updatedUser = (await tx.user.update({
       where: { id: userId },
       data: {
         passwordHash,
-        tokenVersion: user.tokenVersion ? user.tokenVersion + 1 : 1,
+        tokenVersion: { increment: 1 },
       },
       include: {
         userBranchRoles: {
@@ -575,6 +590,7 @@ export class UserService {
       {
         email: updatedUser.email,
       },
+      tx,
     );
 
     // Invalidate all existing sessions by rotating token version
@@ -582,5 +598,6 @@ export class UserService {
 
     const { passwordHash: _, ...result } = updatedUser as any;
     return result;
+    });
   }
 }

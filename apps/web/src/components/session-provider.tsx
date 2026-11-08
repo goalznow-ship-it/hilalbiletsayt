@@ -172,7 +172,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const downloadFile = useCallback(
     async (path: string, mimeType: string): Promise<Blob> => {
       if (!token) throw new Error("Hesabınıza daxil olun.");
-      if (!path.startsWith("/omr/exams/") ||
+      if ((!path.startsWith("/omr/exams/") && !/^\/ticket\/report\.xlsx(?:\?|$)/.test(path)) ||
           !["text/csv", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/pdf"].includes(mimeType))
         throw new Error("İxrac ünvanı düzgün deyil.");
       const response = await fetch(`/api${path}`, {

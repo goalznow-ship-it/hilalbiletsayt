@@ -61,8 +61,8 @@ async function seedExamSession(options?: {
     data: {
       examId: exam.id,
       sessionCode: `S-${randomUUID().slice(0, 8)}`,
-      startsAt: new Date("2026-11-01T09:00:00Z"),
-      endsAt: new Date("2026-11-01T11:00:00Z"),
+      startsAt: new Date(Date.now() + 86400000),
+      endsAt: new Date(Date.now() + 93600000),
       venue: "Otaq A",
       capacity: options?.capacity ?? 10,
       status: options?.sessionStatus ?? "OPEN",

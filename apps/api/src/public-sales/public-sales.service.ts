@@ -216,7 +216,7 @@ export class PublicSalesService {
           },
         },
         branch: { select: { name: true, address: true, phone: true } },
-        candidate: { select: { full_name: true } },
+        candidate: { select: { full_name: true, candidate_number: true } },
       },
     });
     if (!ticket) throw new NotFoundException("Bilet tapılmadı.");

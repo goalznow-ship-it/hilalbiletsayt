@@ -18,8 +18,8 @@ export class ResultsController {
   @Get("exams")
   @Roles([...CENTRAL_ADMIN_ROLES, "OMR_OPERATOR"])
   @ApiOperation({ summary: "Result readiness and publication state per exam" })
-  list() {
-    return this.results.listExams();
+  list(@CurrentUser() user: AuthenticatedUser) {
+    return this.results.listExams(user);
   }
 
   @Post("exams/:examId/publish")

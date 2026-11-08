@@ -16,6 +16,7 @@ export default function KeysPage() {
   const [examId, setExamId] = useState("");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
+  const [randomCount, setRandomCount] = useState(10);
   const [keys, setKeys] = useState<Key[]>([]);
   const [variant, setVariant] = useState("A");
   const [choices, setChoices] = useState(4);
@@ -128,6 +129,22 @@ export default function KeysPage() {
         </label>)}
       </div>
       <h3 className="font-medium">Suallar ({selected.length})</h3>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="text-sm">Təsadüfi sual sayı
+          <input type="number" min={1} max={150} value={randomCount} onChange={e => setRandomCount(Number(e.target.value))}
+            className="block w-28 rounded border border-slate-300 p-2" />
+        </label>
+        <button type="button" disabled={busy || !examId} className="rounded border border-slate-300 p-2 text-sm disabled:opacity-40"
+          onClick={async () => {
+            setBusy(true); setError(""); setInfo("");
+            try {
+              const rows = await request<Question[]>(`/question/random?${new URLSearchParams({ examId, count: String(randomCount), choiceCount: String(choices) })}`);
+              setSelected(rows.map(row => row.id));
+              setInfo(`${rows.length} sual təsadüfi seçildi. Açarı yaratmaqla seçimi saxlayın.`);
+            } catch (err) { setError(err instanceof Error ? err.message : "Suallar seçilmədi."); }
+            finally { setBusy(false); }
+          }}>Təsadüfi seç</button>
+      </div>
       <button type="button" className="text-sm text-[#7A0014] underline" onClick={() => setSelected(questions.map(q => q.id))}>Hamısını seç</button>
       <p className="text-xs text-slate-500">Suallar yaradılma sırası ilə saxlanır; düzgün cavablar yalnız mərkəzi administratora görünür.</p>
       <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">

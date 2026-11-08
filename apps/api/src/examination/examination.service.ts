@@ -2,8 +2,10 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { AuditService } from "../audit/audit.service";
 import { isValidQepikPrice } from "../common/money";
 
 type ExamWhere = {
@@ -17,6 +19,7 @@ type ExamCreateData = {
   description?: string;
   price?: number | null;
   createdBy: string;
+  status?: string;
 };
 
 type ExamUpdateData = {
@@ -31,7 +34,7 @@ type ExamUpdateData = {
 export class ExaminationService {
   private prisma: any;
 
-  constructor(private readonly prismaService: PrismaService) {
+  constructor(private readonly prismaService: PrismaService, private readonly audit: AuditService) {
     this.prisma = prismaService;
   }
 
@@ -52,8 +55,10 @@ export class ExaminationService {
     const exams = await this.prisma.exam.findMany({
       where,
       include: {
+        _count: { select: { sessions: true } },
         sessions: {
-          take: 1,
+          where: { status: "OPEN", startsAt: { gt: new Date() } },
+          include: { _count: { select: { tickets: { where: { status: { in: ["ACTIVE", "USED"] } } } } } },
           orderBy: { startsAt: "asc" },
         },
       },
@@ -68,7 +73,12 @@ export class ExaminationService {
       price: exam.price,
       status: exam.status,
       createdAt: exam.createdAt,
-      sessionCount: exam.sessions.length,
+      sessionCount: exam._count.sessions,
+      salesNotice: exam.status !== "PUBLISHED" ? "İmtahan dərc edilməyib."
+        : !isValidQepikPrice(exam.price) ? "Bilet qiyməti təyin edilməyib."
+        : !exam.sessions.length ? "Gələcək sessiya yaradın və satışı açın."
+        : !exam.sessions.some((session: any) => session.capacity > session._count.tickets) ? "Açıq sessiyalarda boş yer yoxdur."
+        : null,
     }));
   }
 
@@ -96,7 +106,7 @@ export class ExaminationService {
         venue: s.venue,
         capacity: s.capacity,
         registered: await this.prisma.ticket.count({
-          where: { sessionId: s.id, status: "ACTIVE" },
+          where: { sessionId: s.id, status: { in: ["ACTIVE", "USED"] } },
         }),
         status: s.status,
       })),
@@ -116,6 +126,8 @@ export class ExaminationService {
   }
 
   async create(data: ExamCreateData) {
+    if (data.status === "PUBLISHED" && !isValidQepikPrice(data.price))
+      throw new BadRequestException("Dərc etmək üçün imtahan qiymətini təyin edin");
     if (
       data.price !== undefined &&
       data.price !== null &&
@@ -136,15 +148,19 @@ export class ExaminationService {
       );
     }
 
-    const newExam = await this.prisma.exam.create({
+    const newExam = await this.prismaService.$transaction(async (tx) => {
+    const created = await tx.exam.create({
       data: {
         code: data.code,
         title: data.title,
         description: data.description,
         price: data.price ?? null,
         createdBy: data.createdBy,
-        status: "DRAFT",
+        status: data.status ?? "DRAFT",
       },
+    });
+    await this.audit.log("EXAM_CREATED", data.createdBy, "Exam", created.id, { status: created.status, price: created.price }, tx);
+    return created;
     });
 
     return {
@@ -158,7 +174,7 @@ export class ExaminationService {
     };
   }
 
-  async update(id: string, data: ExamUpdateData) {
+  async update(id: string, data: ExamUpdateData, actorId?: string) {
     if (
       data.price !== undefined &&
       data.price !== null &&
@@ -199,7 +215,8 @@ export class ExaminationService {
       );
     }
 
-    const updatedExam = await this.prisma.exam.update({
+    const updatedExam = await this.prismaService.$transaction(async (tx) => {
+    const updated = await tx.exam.update({
       where: { id },
       data: {
         code: data.code !== undefined ? data.code : exam.code,
@@ -209,6 +226,10 @@ export class ExaminationService {
         price: data.price !== undefined ? data.price : exam.price,
         status: data.status !== undefined ? data.status : exam.status,
       },
+    });
+    const action = updated.status !== exam.status ? `EXAM_${updated.status}` : "EXAM_UPDATED";
+    await this.audit.log(action, actorId, "Exam", id, { from: exam.status, to: updated.status, fields: Object.keys(data) }, tx);
+    return updated;
     });
 
     return {
@@ -241,10 +262,7 @@ export class ExaminationService {
         "Dərc etmək üçün imtahan qiymətini təyin edin",
       );
 
-    const updatedExam = await this.prisma.exam.update({
-      where: { id },
-      data: { status: "PUBLISHED" },
-    });
+    const updatedExam = await this.update(id, { status: "PUBLISHED" }, _publishedBy);
 
     return {
       id: updatedExam.id,
@@ -269,10 +287,7 @@ export class ExaminationService {
       );
     }
 
-    const updatedExam = await this.prisma.exam.update({
-      where: { id },
-      data: { status: "ARCHIVED" },
-    });
+    const updatedExam = await this.update(id, { status: "ARCHIVED" }, _archivedBy);
 
     return {
       id: updatedExam.id,
@@ -280,5 +295,20 @@ export class ExaminationService {
       title: updatedExam.title,
       status: updatedExam.status,
     };
+  }
+
+  async remove(id: string, actorId: string) {
+    return this.prismaService.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "exams" WHERE "id" = ${id}::uuid FOR UPDATE`;
+      const exam = await tx.exam.findUnique({ where: { id }, include: { _count: { select: {
+        sessions: true, tickets: true, registrations: true, questions: true, omrKeys: true, omrUploads: true,
+      } } } });
+      if (!exam) throw new NotFoundException("Sənəd tapılmadı");
+      if (exam.status !== "DRAFT" || Object.values(exam._count).some(Boolean))
+        throw new ConflictException("Yalnız əlaqəli məlumatı olmayan qaralama silinə bilər. İmtahanı arxivləşdirin.");
+      await tx.exam.delete({ where: { id } });
+      await this.audit.log("EXAM_DELETED", actorId, "Exam", id, { code: exam.code }, tx);
+      return { deleted: true };
+    });
   }
 }

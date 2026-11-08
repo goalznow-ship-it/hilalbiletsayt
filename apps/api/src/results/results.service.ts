@@ -7,7 +7,7 @@ import {
 import { createHash, timingSafeEqual } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
-import { AuthenticatedUser } from "../auth/authorization";
+import { AuthenticatedUser, getBranchIdsForRoles, isCentralAdmin } from "../auth/authorization";
 import { verifySignedTicketToken } from "../common/qr-signature";
 
 type ExamResultRow = {
@@ -19,6 +19,7 @@ type ExamResultRow = {
   review: number;
   duplicate: number;
   processing: number;
+  average_percent: number | null;
 };
 
 // One message for every failed lookup, so responses do not reveal whether a
@@ -43,8 +44,10 @@ export class ResultsService {
     private readonly audit: AuditService,
   ) {}
 
-  async listExams() {
-    const rows = await this.examCounts(this.prisma, null);
+  async listExams(user: AuthenticatedUser) {
+    const rows = await this.examCounts(this.prisma, null,
+      isCentralAdmin(user) ? null : user.userId,
+      isCentralAdmin(user) ? null : getBranchIdsForRoles(user, ["OMR_OPERATOR"]));
     return rows.map((row) => ({
       examId: row.id,
       code: row.code,
@@ -54,6 +57,7 @@ export class ResultsService {
       review: row.review,
       duplicate: row.duplicate,
       processing: row.processing,
+      averagePercent: row.average_percent,
     }));
   }
 
@@ -80,17 +84,27 @@ export class ResultsService {
     });
   }
 
-  private examCounts(client: Pick<PrismaService, "$queryRaw">, examId: string | null) {
+  private examCounts(client: Pick<PrismaService, "$queryRaw">, examId: string | null,
+    actorId: string | null = null, branchIds: string[] | null = null) {
     return client.$queryRaw<ExamResultRow[]>`
       SELECT e."id", e."code", e."title", e."results_published_at",
              count(p."id") FILTER (WHERE p."status" = 'COMPLETED')::int AS completed,
              count(p."id") FILTER (WHERE p."status" = 'REVIEW')::int AS review,
              count(p."id") FILTER (WHERE p."status" = 'DUPLICATE')::int AS duplicate,
+             avg(CASE WHEN p."status" = 'COMPLETED' AND t."status" <> 'CANCELLED'
+                  AND jsonb_typeof(p."data"->'score') = 'number'
+                  AND jsonb_typeof(p."data"->'maximumScore') = 'number'
+               THEN (p."data"->>'score')::numeric * 100 / nullif((p."data"->>'maximumScore')::numeric, 0)
+               END)::float8 AS average_percent,
              (SELECT count(*)::int FROM "omr_uploads" u2
-               WHERE u2."examId" = e."id" AND u2."status" IN ('PENDING', 'PROCESSING')) AS processing
+               WHERE u2."examId" = e."id" AND u2."status" IN ('PENDING', 'PROCESSING')
+                 AND (${actorId}::uuid IS NULL OR u2."createdBy" = ${actorId}::uuid)) AS processing
         FROM "exams" e
-        LEFT JOIN "omr_uploads" u ON u."examId" = e."id"
-        LEFT JOIN "omr_pages" p ON p."uploadId" = u."id"
+        LEFT JOIN "omr_uploads" u ON u."examId" = e."id" AND (${actorId}::uuid IS NULL OR u."createdBy" = ${actorId}::uuid)
+        LEFT JOIN "omr_pages" p ON p."uploadId" = u."id" AND (${branchIds}::uuid[] IS NULL OR EXISTS (
+          SELECT 1 FROM "omr_sheets" allowed WHERE allowed."id" = p."sheetId" AND allowed."branchId" = ANY(${branchIds}::uuid[])))
+        LEFT JOIN "omr_sheets" s ON s."id" = p."sheetId"
+        LEFT JOIN "tickets" t ON t."id" = s."ticketId"
        WHERE (${examId}::uuid IS NULL OR e."id" = ${examId}::uuid)
        GROUP BY e."id"
        ORDER BY e."createdAt" DESC
@@ -144,6 +158,18 @@ export class ResultsService {
 
     const outcomes = Array.isArray(data.outcomes) ? (data.outcomes as Array<{ outcome?: string }>) : [];
     const count = (name: string) => outcomes.filter((item) => item?.outcome === name).length;
+    // Competition rank uses score percentage so keys with different maxima remain comparable.
+    const [ranking] = await this.prisma.$queryRaw<Array<{ rank: number; participants: number }>>`
+      WITH scores AS (
+        SELECT CASE WHEN jsonb_typeof(p."data"->'score') = 'number'
+                        AND jsonb_typeof(p."data"->'maximumScore') = 'number'
+                    THEN (p."data"->>'score')::numeric / nullif((p."data"->>'maximumScore')::numeric, 0)
+                    END AS fraction
+        FROM "omr_pages" p JOIN "omr_sheets" s ON s."id" = p."sheetId"
+        JOIN "tickets" t ON t."id" = s."ticketId"
+        WHERE s."examId" = ${ticket.examId}::uuid AND p."status" = 'COMPLETED' AND t."status" <> 'CANCELLED'
+      ) SELECT (1 + count(*) FILTER (WHERE fraction > ${data.score}::numeric / nullif(${data.maximumScore}::numeric, 0)))::int AS rank,
+               count(fraction)::int AS participants FROM scores`;
     return {
       examCode: ticket.exam.code,
       examTitle: ticket.exam.title,
@@ -154,6 +180,8 @@ export class ResultsService {
       wrong: count("WRONG"),
       blank: count("BLANK"),
       multiple: count("MULTIPLE"),
+      rank: ranking.rank,
+      participants: ranking.participants,
       publishedAt: ticket.exam.resultsPublishedAt,
     };
   }

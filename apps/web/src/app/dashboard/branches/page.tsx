@@ -46,7 +46,7 @@ const PAGE_SIZE = 8;
 
 export default function BranchesPage() {
   const { user, request, selectedBranch } = useSession();
-  const { branches, loading, error, reload } = useBranches();
+  const { branches, loading, error, reload } = useBranches(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [page, setPage] = useState(1);

@@ -8,6 +8,6 @@ export class ResultLookupDto {
 
   /** Second factor printed on the ticket / known to the candidate. */
   @IsString()
-  @Length(3, 64)
+  @Length(3, 80)
   candidateNumber!: string;
 }

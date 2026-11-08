@@ -9,6 +9,9 @@ import {
   Put,
   UseGuards,
   Query,
+  Header,
+  StreamableFile,
+  ParseUUIDPipe,
 } from "@nestjs/common";
 import { TicketService } from "./ticket.service";
 import { CreateTicketDto } from "./create-ticket.dto";
@@ -92,6 +95,31 @@ export class TicketController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.ticketService.getUsageStats(query, user);
+  }
+
+  @Get("report")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(TICKET_SELLER_ROLES)
+  @Header("Cache-Control", "no-store")
+  report(@Query() query: TicketQueryDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.ticketService.salesReport(query, user);
+  }
+
+  @Get("report.xlsx")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(TICKET_SELLER_ROLES)
+  @Header("Cache-Control", "no-store")
+  async reportXlsx(@Query() query: TicketQueryDto, @CurrentUser() user: AuthenticatedUser) {
+    return new StreamableFile(await this.ticketService.salesXlsx(query, user), {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", disposition: 'attachment; filename="hilal-sales.xlsx"',
+    });
+  }
+
+  @Post(":id/refund")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(["SUPER_ADMIN", "CENTRAL_ADMIN", "BRANCH_MANAGER"])
+  refund(@Param("id", ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.ticketService.refund(id, user);
   }
 
   @Get(":id")

@@ -16,6 +16,7 @@ type Ticket = {
   price: number;
   status: string;
   paymentStatus: string;
+  paymentMethod: string | null;
   sellerId: string | null;
 };
 export default function TicketsPage() {
@@ -57,14 +58,15 @@ export default function TicketsPage() {
     if (
       !window.confirm(
         operation === "payment"
-          ? `${ticket.code}: ${formatAzn(ticket.price)} nağd ödəniş alındığını təsdiqləyirsiniz?`
+          ? `${ticket.code}: ${formatAzn(ticket.price)} ödənişin (${ticket.paymentMethod === "CARD" ? "kart" : ticket.paymentMethod === "BANK_TRANSFER" ? "bank köçürməsi" : "nağd"}) alındığını təsdiqləyirsiniz?`
+          : operation === "refund" ? `${ticket.code}: ${formatAzn(ticket.price)} müştəriyə geri verildiyini təsdiqləyirsiniz? Bilet ləğv ediləcək.`
           : `${ticket.code} bileti ləğv edilsin?`,
       )
     )
       return;
     setBusy(ticket.id);
     try {
-      await request(`/ticket/${ticket.id}/${operation}`, { method: "PUT" });
+      await request(`/ticket/${ticket.id}/${operation}`, { method: operation === "refund" ? "POST" : "PUT" });
       setReload((value) => value + 1);
     } catch (cause) {
       setError(
@@ -108,6 +110,7 @@ export default function TicketsPage() {
                   {formatAzn(ticket.price)} ·{" "}
                   {ticket.paymentStatus === "PAID"
                     ? "Ödənilib"
+                    : ticket.paymentStatus === "REFUNDED" ? "Geri qaytarılıb"
                     : "Ödəniş gözlənilir"}
                 </p>
                 <p>
@@ -122,6 +125,9 @@ export default function TicketsPage() {
                   }
                 </p>
                 <div className="flex flex-wrap gap-3">
+                  {(central || user.roles?.includes("BRANCH_MANAGER")) && ticket.paymentStatus === "PAID" && ticket.status !== "USED" && (
+                    <Button variant="outline" disabled={Boolean(busy)} onClick={() => action(ticket, "refund")}>Ödənişi qaytar</Button>
+                  )}
                   {cashier &&
                     ticket.status === "ACTIVE" &&
                     ticket.paymentStatus === "PENDING" && (

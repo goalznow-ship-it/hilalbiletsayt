@@ -35,6 +35,7 @@ export class AuthService {
   async login(user: any) {
     const payload = {
       sub: user.id,
+      tokenVersion: user.tokenVersion ?? 0,
       email: user.email,
       role: user.userBranchRoles[0]?.role.name,
     };
@@ -59,18 +60,20 @@ export class AuthService {
     }
 
     // Check token version - prevent old token reuse
-    if (user.tokenVersion && user.tokenVersion <= previousTokenVersion) {
+    if (user.tokenVersion !== previousTokenVersion) {
       throw new ForbiddenException("Token yenilənmemiş. Zəhmət olmasa, yenidən giriş yapın.");
     }
 
     // Update token version
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { tokenVersion: user.tokenVersion ? user.tokenVersion + 1 : 1 },
+    const rotated = await this.prisma.user.updateMany({
+      where: { id: userId, isActive: true, tokenVersion: previousTokenVersion },
+      data: { tokenVersion: { increment: 1 } },
     });
+    if (!rotated.count) throw new UnauthorizedException("Yenidən daxil olun");
 
     const payload = {
       sub: user.id,
+      tokenVersion: previousTokenVersion + 1,
       email: user.email,
       role: user.userBranchRoles[0]?.role.name,
     };

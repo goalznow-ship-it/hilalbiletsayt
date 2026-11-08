@@ -391,7 +391,7 @@ describe("Application HTTP e2e (test database)", () => {
       .patch(`/api/exam-sessions/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ status: "OPEN" })
-      .expect(400);
+      .expect(200);
 
     const cancellable = await request(app.getHttpServer())
       .post("/api/exam-sessions")

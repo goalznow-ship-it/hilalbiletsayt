@@ -8,18 +8,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ExamDialog } from "@/components/examinations/exam-dialog";
 import { formatAzn } from "@/lib/money";
-import { sessionDate } from "@/lib/public-sales";
+import { sessionDate, sessionInputDate, sessionInputToIso } from "@/lib/public-sales";
 type Exam = {
   id: string;
   title: string;
   code: string;
   price: number | null;
   status: string;
+  salesNotice: string | null;
+  sessionCount: number;
 };
 type Session = {
   id: string;
   sessionCode: string;
   startsAt: string;
+  endsAt: string;
+  venue: string | null;
   capacity: number;
   registered: number;
   status: string;
@@ -33,6 +37,8 @@ export default function ExamsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [reload, setReload] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [editingSession, setEditingSession] = useState<Session | null>(null);
+  const [notice, setNotice] = useState("");
   const central = user?.roles?.some((role) =>
     ["SUPER_ADMIN", "CENTRAL_ADMIN"].includes(role),
   );
@@ -87,18 +93,19 @@ export default function ExamsPage() {
     setBusy(true);
     setError("");
     try {
-      await request("/exam-sessions", {
-        method: "POST",
+      await request(editingSession ? `/exam-sessions/${editingSession.id}` : "/exam-sessions", {
+        method: editingSession ? "PATCH" : "POST",
         body: JSON.stringify({
-          examId: selected.id,
-          sessionCode: data.get("sessionCode"),
-          startsAt: new Date(`${data.get("startsAt")}:00+04:00`).toISOString(),
-          endsAt: new Date(`${data.get("endsAt")}:00+04:00`).toISOString(),
+          ...(!editingSession ? { examId: selected.id, sessionCode: data.get("sessionCode") } : {}),
+          startsAt: sessionInputToIso(String(data.get("startsAt"))),
+          endsAt: sessionInputToIso(String(data.get("endsAt"))),
           capacity: Number(data.get("capacity")),
           venue: data.get("venue"),
         }),
       });
       form.reset();
+      setNotice(editingSession ? "Sessiya yeniləndi." : "Sessiya yaradıldı. İctimai satış üçün “Satışı aç” düyməsini seçin.");
+      setEditingSession(null);
       setReload((value) => value + 1);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Sessiya yaradılmadı.");
@@ -119,6 +126,8 @@ export default function ExamsPage() {
           {error}
         </p>
       )}
+      {notice && <p role="status" className="my-4">{notice}</p>}
+      {exams === null && !error && <p role="status">İmtahanlar yüklənir…</p>}
       {central && (
         <Button className="mb-6" onClick={() => setEdit("")}>
           Yeni imtahan
@@ -128,7 +137,7 @@ export default function ExamsPage() {
         <ExamDialog
           examId={edit || undefined}
           onClose={() => setEdit(null)}
-          onSuccess={() => setReload((value) => value + 1)}
+          onSuccess={() => { setReload((value) => value + 1); setNotice("İmtahan saxlanıldı. Satışa hazırlıq məlumatını yoxlayın."); }}
         />
       )}
       <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -149,7 +158,8 @@ export default function ExamsPage() {
                 )[exam.status]
               }
             </p>
-            <div className="flex gap-3">
+            <p className="my-2 text-sm">{exam.sessionCount} sessiya · {exam.salesNotice ?? "İctimai bilet səhifəsində görünür."}</p>
+            <div className="flex flex-wrap gap-3">
               {central && (
                 <Button variant="outline" onClick={() => setEdit(exam.id)}>
                   Redaktə et
@@ -159,11 +169,24 @@ export default function ExamsPage() {
                 variant="outline"
                 onClick={() => {
                   setSessions([]);
+                  setEditingSession(null);
                   setSelected(exam);
                 }}
               >
                 Sessiyalar
               </Button>
+              {central && exam.status === "DRAFT" && (
+                <Button variant="outline" disabled={busy} onClick={async () => {
+                  if (!window.confirm("Qaralama silinsin? Əlaqəli məlumat varsa silinməyəcək.")) return;
+                  setBusy(true); setError("");
+                  try {
+                    await request(`/exams/${exam.id}`, { method: "DELETE" });
+                    if (selected?.id === exam.id) setSelected(null);
+                    setReload(value => value + 1); setNotice("Qaralama silindi.");
+                  } catch (cause) { setError(cause instanceof Error ? cause.message : "İmtahan silinmədi."); }
+                  finally { setBusy(false); }
+                }}>Qaralamanı sil</Button>
+              )}
             </div>
           </Card>
         ))}
@@ -185,7 +208,7 @@ export default function ExamsPage() {
                 </p>
                 {central && (
                   <div className="flex flex-wrap gap-3">
-                    {session.status === "PLANNED" && (
+                    {["PLANNED", "CLOSED"].includes(session.status) && (
                       <Button
                         disabled={busy}
                         onClick={() => changeSession(session.id, "OPEN")}
@@ -201,7 +224,7 @@ export default function ExamsPage() {
                         Satışı bağla
                       </Button>
                     )}
-                    {["PLANNED", "OPEN"].includes(session.status) && (
+                    {["PLANNED", "OPEN", "CLOSED"].includes(session.status) && (
                       <Button
                         disabled={busy}
                         variant="outline"
@@ -213,20 +236,23 @@ export default function ExamsPage() {
                         Sessiyanı ləğv et
                       </Button>
                     )}
+                    {session.status !== "CANCELLED" && <Button variant="outline" disabled={busy} onClick={() => setEditingSession(session)}>Sessiyanı redaktə et</Button>}
                   </div>
                 )}
               </Card>
             ))}
           </div>
           {central && (
-            <form onSubmit={createSession} className="public-form">
-              <h3>Yeni sessiya (Bakı vaxtı)</h3>
+            <form key={editingSession?.id ?? `new-${selected.id}`} onSubmit={createSession} className="public-form">
+              <h3>{editingSession ? "Sessiyanı redaktə et" : "Yeni sessiya"} (Bakı vaxtı)</h3>
               <label htmlFor="session-code">Sessiya kodu</label>
               <Input
                 id="session-code"
                 name="sessionCode"
                 required
                 maxLength={50}
+                defaultValue={editingSession?.sessionCode}
+                disabled={Boolean(editingSession)}
               />
               <label htmlFor="starts">Başlama vaxtı</label>
               <Input
@@ -234,11 +260,12 @@ export default function ExamsPage() {
                 name="startsAt"
                 type="datetime-local"
                 required
+                defaultValue={editingSession ? sessionInputDate(editingSession.startsAt) : ""}
               />
               <label htmlFor="ends">Bitmə vaxtı</label>
-              <Input id="ends" name="endsAt" type="datetime-local" required />
+              <Input id="ends" name="endsAt" type="datetime-local" required defaultValue={editingSession ? sessionInputDate(editingSession.endsAt) : ""} />
               <label htmlFor="venue">İmtahan yeri</label>
-              <Input id="venue" name="venue" maxLength={200} required />
+              <Input id="venue" name="venue" maxLength={200} required defaultValue={editingSession?.venue ?? ""} />
               <label htmlFor="capacity">Tutum</label>
               <Input
                 id="capacity"
@@ -246,10 +273,12 @@ export default function ExamsPage() {
                 type="number"
                 min={1}
                 required
+                defaultValue={editingSession?.capacity}
               />
               <Button disabled={busy} type="submit">
-                Sessiya yarat
+                {busy ? "Saxlanılır…" : editingSession ? "Dəyişiklikləri saxla" : "Sessiya yarat"}
               </Button>
+              {editingSession && <Button type="button" variant="outline" disabled={busy} onClick={() => setEditingSession(null)}>Redaktəni bağla</Button>}
             </form>
           )}
         </section>

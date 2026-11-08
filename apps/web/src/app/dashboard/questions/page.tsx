@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/page-ui";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, LoaderCircle, Plus, Edit, Trash2, Eye } from "lucide-react";
+import { Search, Plus, Edit, Trash2 } from "lucide-react";
 import { QuestionDialog } from "@/components/examinations/QuestionDialog";
 
 type Question = {
@@ -19,6 +19,9 @@ type Question = {
   points: number;
   isActive: boolean;
   createdAt: string;
+  subject: string | null;
+  topic: string | null;
+  imageUrl: string | null;
 };
 
 type Exam = {
@@ -37,6 +40,13 @@ export default function QuestionsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedExamId, setSelectedExamId] = useState("");
   const [editQuestion, setEditQuestion] = useState<Question | null>(null);
+  const [reload, setReload] = useState(0);
+  const [busy, setBusy] = useState("");
+  const [subject, setSubject] = useState("");
+  const [topic, setTopic] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
     if (!user) return;
@@ -45,8 +55,9 @@ export default function QuestionsPage() {
       try {
         const result = await request<Exam[]>(`/exams`);
         if (active) setExams(Array.isArray(result) ? result : []);
-      } catch {
-        // ignore
+      } catch (cause) {
+        // Exam choices are required before a question can be created.
+        if (active) setError(cause instanceof Error ? cause.message : "İmtahanlar yüklənmədi.");
       } finally {
         if (active) setExamsLoading(false);
       }
@@ -65,12 +76,19 @@ export default function QuestionsPage() {
       setError("");
       try {
         const params = new URLSearchParams();
+        params.set("page", String(page));
+        params.set("limit", "20");
+        if (subject.trim()) params.set("subject", subject.trim());
+        if (topic.trim()) params.set("topic", topic.trim());
         if (selectedExamId) params.append("examId", selectedExamId);
         if (searchQuery.trim()) params.append("search", searchQuery.trim());
-        const result = await request<{ data: Question[]; total: number }>(
+        const result = await request<{ data: Question[]; total: number; totalPages: number }>(
           `/question${params.toString() ? `?${params}` : ""}`,
         );
-        if (active) setQuestions(Array.isArray(result?.data) ? result.data : []);
+        if (active) {
+          setQuestions(Array.isArray(result?.data) ? result.data : []);
+          setTotal(result.total); setTotalPages(result.totalPages);
+        }
       } catch (cause) {
         if (active) {
           setError(
@@ -85,7 +103,7 @@ export default function QuestionsPage() {
     return () => {
       active = false;
     };
-  }, [user, request, selectedExamId, searchQuery]);
+  }, [user, request, selectedExamId, searchQuery, reload, page, subject, topic]);
 
   if (initializing) {
     return (
@@ -134,7 +152,7 @@ export default function QuestionsPage() {
                 <select
                   id="exam-select"
                   value={selectedExamId}
-                  onChange={(event) => setSelectedExamId(event.target.value)}
+                  onChange={(event) => { setSelectedExamId(event.target.value); setPage(1); }}
                   disabled={loading}
                   className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
                 >
@@ -158,10 +176,13 @@ export default function QuestionsPage() {
                 id="question-search"
                 placeholder="Sual axtar..."
                 value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                disabled={loading}
+                onChange={(event) => { setSearchQuery(event.target.value); setPage(1); }}
               />
             </div>
+            <div><label htmlFor="subject-filter">Fənn</label>
+              <Input id="subject-filter" value={subject} onChange={event => { setSubject(event.target.value); setPage(1); }} /></div>
+            <div><label htmlFor="topic-filter">Mövzu</label>
+              <Input id="topic-filter" value={topic} onChange={event => { setTopic(event.target.value); setPage(1); }} /></div>
             <div className="flex items-end gap-2">
               <Button
                 type="button"
@@ -169,6 +190,7 @@ export default function QuestionsPage() {
                 onClick={() => {
                   setSelectedExamId("");
                   setSearchQuery("");
+                  setSubject(""); setTopic(""); setPage(1);
                 }}
                 disabled={loading}
               >
@@ -180,8 +202,8 @@ export default function QuestionsPage() {
         </div>
 
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">Sual siyahısı ({questions.length})</h2>
-          <Button onClick={() => setEditQuestion({} as Question)} disabled={!selectedExamId && exams.length > 0}>
+          <h2 className="text-xl font-semibold">Sual siyahısı ({total})</h2>
+          <Button onClick={() => setEditQuestion({} as Question)} disabled={!selectedExamId}>
             <Plus className="mr-2 h-4 w-4" />
             Yeni sual
           </Button>
@@ -215,6 +237,8 @@ export default function QuestionsPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {questions.map((question) => (
               <Card key={question.id} className="p-4">
+                <p className="text-sm text-muted-foreground">{[question.subject, question.topic].filter(Boolean).join(" · ")}</p>
+                {question.imageUrl && <img src={question.imageUrl} alt="Sualın şəkli" loading="lazy" referrerPolicy="no-referrer" className="max-h-60 max-w-full object-contain" />}
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="line-clamp-2 font-medium text-title">
@@ -243,6 +267,7 @@ export default function QuestionsPage() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label="Sualı redaktə et"
                       onClick={() => setEditQuestion(question)}
                     >
                       <Edit className="h-4 w-4" />
@@ -250,13 +275,16 @@ export default function QuestionsPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => {
+                      aria-label="Sualı deaktiv et"
+                      disabled={Boolean(busy)}
+                      onClick={async () => {
                         if (window.confirm("Sual silinsin?")) {
-                          void request(`/question/${question.id}`, {
-                            method: "DELETE",
-                          }).then(() => {
-                            setQuestions(questions.filter((q) => q.id !== question.id));
-                          });
+                          setBusy(question.id); setError("");
+                          try {
+                            await request(`/question/${question.id}`, { method: "DELETE" });
+                            setReload(value => value + 1);
+                          } catch (cause) { setError(cause instanceof Error ? cause.message : "Sual deaktiv edilmədi."); }
+                          finally { setBusy(""); }
                         }
                       }}
                     >
@@ -272,14 +300,20 @@ export default function QuestionsPage() {
 
       {editQuestion && (
         <QuestionDialog
-          examId={selectedExamId || editQuestion.examId}
+          examId={editQuestion.examId || selectedExamId}
           questionId={editQuestion.id || undefined}
           onClose={() => setEditQuestion(null)}
           onSuccess={() => {
             setEditQuestion(null);
+            setReload(value => value + 1);
           }}
         />
       )}
+      <nav aria-label="Sual səhifələri" className="flex items-center justify-center gap-4 p-4">
+        <Button variant="outline" disabled={page <= 1 || loading} onClick={() => setPage(value => value - 1)}>Əvvəlki</Button>
+        <span>{page} / {totalPages}</span>
+        <Button variant="outline" disabled={page >= totalPages || loading} onClick={() => setPage(value => value + 1)}>Növbəti</Button>
+      </nav>
     </div>
   );
 }

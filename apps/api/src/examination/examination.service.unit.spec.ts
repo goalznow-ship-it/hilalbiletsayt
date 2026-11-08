@@ -18,7 +18,8 @@ describe("ExaminationService (unit, mocked Prisma)", () => {
         count: vi.fn().mockResolvedValue(0),
       },
     };
-    service = new ExaminationService(prisma);
+    prisma.$transaction = vi.fn(async (callback) => callback(prisma));
+    service = new ExaminationService(prisma, { log: vi.fn() } as any);
   });
 
   describe("findAll", () => {
@@ -32,6 +33,7 @@ describe("ExaminationService (unit, mocked Prisma)", () => {
           status: "DRAFT",
           createdAt: new Date("2026-01-01"),
           sessions: [{ id: "s-1" }],
+          _count: { sessions: 3 },
         },
       ]);
 
@@ -49,7 +51,7 @@ describe("ExaminationService (unit, mocked Prisma)", () => {
         }),
       );
       expect(result).toHaveLength(1);
-      expect(result[0].sessionCount).toBe(1);
+      expect(result[0].sessionCount).toBe(3);
     });
   });
 

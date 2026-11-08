@@ -8,11 +8,13 @@ import {
   Delete,
   Query,
   UseGuards,
+  ParseUUIDPipe,
 } from "@nestjs/common";
 import { QuestionService } from "./question.service";
 import { CreateQuestionDto } from "./question.dto";
 import { UpdateQuestionDto } from "./question.dto";
 import { QuestionQueryDto } from "./question.dto";
+import { RandomQuestionDto } from "./question.dto";
 import { AuthenticatedUser } from "../auth/authorization";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -34,7 +36,7 @@ export class QuestionController {
     @Body() dto: CreateQuestionDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.questionService.create(dto);
+    return this.questionService.create(dto, user.userId);
   }
 
   @Get()
@@ -48,11 +50,16 @@ export class QuestionController {
     return this.questionService.findAll(dto);
   }
 
+  @Get("random")
+  random(@Query() dto: RandomQuestionDto) {
+    return this.questionService.random(dto);
+  }
+
   @Get("exam/:examId")
   @ApiOperation({ summary: "Get questions for an exam" })
   @ApiResponse({ status: 200, description: "List of questions for exam" })
   @ApiBearerAuth()
-  async getByExam(@Param("examId") examId: string) {
+  async getByExam(@Param("examId", ParseUUIDPipe) examId: string) {
     return this.questionService.getByExam(examId);
   }
 
@@ -61,7 +68,7 @@ export class QuestionController {
   @ApiResponse({ status: 200, description: "Question found" })
   @ApiResponse({ status: 404, description: "Question not found" })
   @ApiBearerAuth()
-  async getOne(@Param("id") id: string) {
+  async getOne(@Param("id", ParseUUIDPipe) id: string) {
     return this.questionService.findOne(id);
   }
 
@@ -70,18 +77,18 @@ export class QuestionController {
   @ApiResponse({ status: 200, description: "Question successfully updated" })
   @ApiBearerAuth()
   async update(
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateQuestionDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.questionService.update(id, dto);
+    return this.questionService.update(id, dto, user.userId);
   }
 
   @Delete(":id")
   @ApiOperation({ summary: "Delete/soft-delete a question" })
   @ApiResponse({ status: 200, description: "Question successfully deleted" })
   @ApiBearerAuth()
-  async remove(@Param("id") id: string) {
-    return this.questionService.remove(id);
+  async remove(@Param("id", ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.questionService.remove(id, user.userId);
   }
 }

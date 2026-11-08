@@ -56,6 +56,7 @@ function formatDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString("az-AZ", {
+    timeZone: "Asia/Baku",
     day: "2-digit",
     month: "long",
     year: "numeric",
@@ -91,6 +92,7 @@ export default function CandidatePurchaseDialog({
   const [sessions, setSessions] = useState<ExamSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionId, setSessionId] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [form, setForm] = useState<CandidateForm>(emptyForm);
   const [branchId, setBranchId] = useState(selectedBranch || "");
   const [submitting, setSubmitting] = useState(false);
@@ -111,7 +113,7 @@ export default function CandidatePurchaseDialog({
         );
         if (!active) return;
         setSessions(result);
-        const firstOpen = result.find((item) => item.status === "OPEN");
+        const firstOpen = result.find((item) => item.status === "OPEN" && new Date(item.startsAt) > new Date() && item.registered < item.capacity);
         if (firstOpen) setSessionId(firstOpen.id);
       } catch (cause) {
         if (active) {
@@ -147,7 +149,7 @@ export default function CandidatePurchaseDialog({
         candidateId,
         price: exam.price,
         type: "STANDARD",
-        paymentMethod: "CASH",
+        paymentMethod,
       };
       if (effectiveBranchId) payload.branchId = effectiveBranchId;
       return request<CreatedTicket>("/ticket", {
@@ -155,7 +157,7 @@ export default function CandidatePurchaseDialog({
         body: JSON.stringify(payload),
       });
     },
-    [effectiveBranchId, exam.id, exam.price, request, sessionId],
+    [effectiveBranchId, exam.id, exam.price, request, sessionId, paymentMethod],
   );
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -325,6 +327,13 @@ export default function CandidatePurchaseDialog({
         )}
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4" noValidate>
+          <label className="block text-sm font-medium">Ödəniş üsulu
+            <select value={paymentMethod} onChange={event => setPaymentMethod(event.target.value)} disabled={submitting}
+              className="mt-2 h-10 w-full rounded-lg border border-input bg-background px-3">
+              <option value="CASH">Nağd</option><option value="CARD">Kart (POS terminal)</option>
+              <option value="BANK_TRANSFER">Bank köçürməsi</option>
+            </select>
+          </label>
           <div>
             <label
               className="mb-2 block text-sm font-medium"
@@ -353,6 +362,7 @@ export default function CandidatePurchaseDialog({
                     value={session.id}
                     disabled={
                       session.status !== "OPEN" ||
+                      new Date(session.startsAt) <= new Date() ||
                       session.registered >= session.capacity
                     }
                   >

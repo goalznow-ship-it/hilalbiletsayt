@@ -10,6 +10,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
@@ -24,8 +25,8 @@ export class BranchController {
   @Get()
   @ApiOperation({ summary: "Get all branches" })
   @ApiResponse({ status: 200, description: "List of branches" })
-  async findAll(@CurrentUser() user: AuthenticatedUser) {
-    return this.branchService.findAll(user);
+  async findAll(@CurrentUser() user: AuthenticatedUser, @Query("includeInactive") includeInactive?: string) {
+    return this.branchService.findAll(user, includeInactive === "true");
   }
 
   @Get(":id")
@@ -42,15 +43,15 @@ export class BranchController {
   @Post()
   @ApiOperation({ summary: "Create a new branch" })
   @ApiResponse({ status: 201, description: "Branch created" })
-  async create(@Body() data: CreateBranchDto) {
-    return this.branchService.create(data);
+  async create(@Body() data: CreateBranchDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.branchService.create(data, user.userId);
   }
 
   @Roles([...CENTRAL_ADMIN_ROLES])
   @Patch(":id")
   @ApiOperation({ summary: "Update a branch" })
   @ApiResponse({ status: 200, description: "Branch updated" })
-  async update(@Param("id") id: string, @Body() data: UpdateBranchDto) {
-    return this.branchService.update(id, data);
+  async update(@Param("id") id: string, @Body() data: UpdateBranchDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.branchService.update(id, data, user.userId);
   }
 }

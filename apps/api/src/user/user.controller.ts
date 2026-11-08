@@ -40,7 +40,7 @@ export class UserController {
   @ApiResponse({ status: 403, description: "Insufficient permissions" })
   @ApiResponse({ status: 401, description: "Unauthenticated" })
   async create(
-    @Body() dto: CreateUserDto,
+    @Body() dto: unknown,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     const parsed = CreateUserDto.safeParse(dto);
@@ -98,7 +98,7 @@ export class UserController {
   @ApiResponse({ status: 401, description: "Unauthenticated" })
   async update(
     @Param("id") id: string,
-    @Body() dto: UpdateUserDto,
+    @Body() dto: unknown,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     const parsed = UpdateUserDto.safeParse(dto);
@@ -183,12 +183,12 @@ export class UserController {
   @ApiResponse({ status: 401, description: "Unauthenticated" })
   async resetPassword(
     @Param("id") id: string,
-    @Body() dto: PasswordResetDto,
+    @Body() dto: unknown,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     const parsed = PasswordResetDto.safeParse(dto);
     if (!parsed.success)
-      throw new BadRequestException("Şifrə ən azı 6 simvol olmalıdır");
+      throw new BadRequestException("Şifrə 12–128 simvol olmalıdır");
     return this.userService.resetPassword(
       id,
       parsed.data.newPassword,

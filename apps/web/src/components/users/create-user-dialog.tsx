@@ -38,7 +38,6 @@ export function CreateUserDialog({
   const [roles] = useState<RoleOption[]>(["SUPER_ADMIN", "CENTRAL_ADMIN", "BRANCH_MANAGER", "SELLER", "OMR_OPERATOR"]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,7 +74,6 @@ export function CreateUserDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setSuccess(false);
     setLoading(true);
 
     try {
@@ -92,7 +90,6 @@ export function CreateUserDialog({
         }),
       });
 
-      setSuccess(true);
       setLoading(false);
       onSuccess();
       onClose();
@@ -102,10 +99,6 @@ export function CreateUserDialog({
     }
   };
 
-  useEffect(() => {
-    return () => {};
-  }, []);
-
   if (loading) {
     return (
       <Card className="p-6">
@@ -114,18 +107,12 @@ export function CreateUserDialog({
     );
   }
 
-  if (success) {
-    setSuccess(false);
-    onClose();
-    return null;
-  }
-
   return (
     <Card className="max-w-lg p-6">
       <h3 className="mb-4 text-lg font-medium">Yeni istifadəçi yaradılışı</h3>
 
       {error && (
-        <div className="bg-destructive/10 text-destructive rounded p-3 mb-4">
+        <div role="alert" className="bg-destructive/10 text-destructive rounded p-3 mb-4">
           <span className="icon-destructive" aria-hidden="true" /> <p>{error}</p>
         </div>
       )}
@@ -133,6 +120,7 @@ export function CreateUserDialog({
       <form onSubmit={handleSubmit} className="grid gap-4">
         <Input
           name="email"
+          aria-label="E-poçt"
           type="email"
           placeholder="Email"
           value={form.email}
@@ -141,6 +129,7 @@ export function CreateUserDialog({
         />
         <Input
           name="fullName"
+          aria-label="Tam ad"
           placeholder="Tam Adı"
           value={form.fullName}
           onChange={handleChange}
@@ -148,6 +137,9 @@ export function CreateUserDialog({
         />
         <Input
           name="password"
+          aria-label="Şifrə (ən azı 12 simvol)"
+          minLength={12}
+          maxLength={128}
           type="password"
           placeholder="Şifrə"
           value={form.password}
@@ -157,6 +149,8 @@ export function CreateUserDialog({
 
         <select
           name="role"
+          aria-label="Rol"
+          value={form.role}
           onChange={handleChange}
           className="mt-1 block w-full rounded border-input"
         >
@@ -171,10 +165,12 @@ export function CreateUserDialog({
         <select
           multiple
           name="branchIds"
+          aria-label="Filiallar"
+          value={form.branchIds}
+          required
           onChange={handleChange}
           className="mt-1 block w-full rounded border-input"
         >
-          <option value="">Filial seçin</option>
           {branches.map((b) => (
             <option key={b.id} value={b.id}>
               {b.name}
@@ -185,6 +181,7 @@ export function CreateUserDialog({
         <div className="flex items-center gap-2">
           <input
             type="checkbox"
+            aria-label="İstifadəçi aktivdir"
             name="isActive"
             checked={form.isActive}
             onChange={handleChange}
@@ -196,6 +193,7 @@ export function CreateUserDialog({
         <Button type="submit" className="mt-4 w-full" disabled={loading}>
           {loading ? "Yüklənir..." : "Yadda saxla"}
         </Button>
+        <Button type="button" variant="outline" onClick={onClose}>Bağla</Button>
       </form>
     </Card>
   );

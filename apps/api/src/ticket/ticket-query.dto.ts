@@ -1,11 +1,15 @@
 import { Type } from "class-transformer";
-import { IsUUID, IsOptional, IsInt, IsIn } from "class-validator";
+import { IsUUID, IsOptional, IsInt, IsIn, Matches } from "class-validator";
 
 export const TICKET_STATUSES = ["ACTIVE", "USED", "CANCELLED"] as const;
 
 export type TicketStatus = (typeof TICKET_STATUSES)[number];
 
 export class TicketQueryDto {
+  @IsUUID() @IsOptional() sellerId?: string;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) from?: string;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) to?: string;
+
   @IsUUID()
   @IsOptional()
   examId?: string;

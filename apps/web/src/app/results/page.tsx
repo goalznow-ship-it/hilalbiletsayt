@@ -17,6 +17,8 @@ type Result = {
   wrong: number;
   blank: number;
   multiple: number;
+  rank: number;
+  participants: number;
   publishedAt: string;
 };
 
@@ -96,6 +98,7 @@ function ResultLookup() {
               {result.score} <span className="text-lg">/ {result.maximumScore}</span>
             </p>
             <dl className="metric-grid">
+              <div><dt>Reytinq (faiz üzrə)</dt><dd>{result.rank} / {result.participants}</dd></div>
               <div><dt>Düzgün</dt><dd>{result.correct}</dd></div>
               <div><dt>Səhv</dt><dd>{result.wrong}</dd></div>
               <div><dt>Boş</dt><dd>{result.blank}</dd></div>

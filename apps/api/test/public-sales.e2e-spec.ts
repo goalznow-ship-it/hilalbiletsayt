@@ -135,6 +135,9 @@ describe("Public sales HTTP and real database", () => {
       .get(`/api/public/orders/${results[0].receiptToken}`)
       .expect(200);
     expect(receipt.body.candidate.full_name).toBe(data.fullName);
+    expect(receipt.body.candidate.candidate_number).toBeTruthy();
+    await request(app.getHttpServer()).post("/api/public/results/lookup")
+      .send({ ticket: ticket.code, candidateNumber: receipt.body.candidate.candidate_number }).expect(404);
     expect(receipt.body.candidate.phone).toBeUndefined();
     expect(receipt.body.qrCode).toBe(signTicketToken(ticket.qrCode));
     // The raw stored token is not a valid QR payload without its signature.

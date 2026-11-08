@@ -16,9 +16,15 @@ type Question = {
   correct: number;
   points: number;
   isActive: boolean;
+  subject: string | null;
+  topic: string | null;
+  imageUrl: string | null;
 };
 
 interface QuestionForm {
+  subject: string;
+  topic: string;
+  imageUrl: string;
   question: string;
   variants: string;
   correct: number;
@@ -36,6 +42,7 @@ interface QuestionDialogProps {
 export function QuestionDialog({ examId, questionId, onClose, onSuccess }: QuestionDialogProps) {
   const { request } = useSession();
   const [form, setForm] = useState<QuestionForm>({
+    subject: "", topic: "", imageUrl: "",
     question: "",
     variants: "",
     correct: 1,
@@ -44,6 +51,7 @@ export function QuestionDialog({ examId, questionId, onClose, onSuccess }: Quest
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(!questionId);
 
   useEffect(() => {
     if (questionId) {
@@ -58,7 +66,9 @@ export function QuestionDialog({ examId, questionId, onClose, onSuccess }: Quest
               correct: result.correct,
               points: result.points,
               isActive: result.isActive,
+              subject: result.subject ?? "", topic: result.topic ?? "", imageUrl: result.imageUrl ?? "",
             });
+            setLoaded(true);
           }
         } catch {
           if (!cancelled) setError("Sual məlumatları alınmadı.");
@@ -74,12 +84,14 @@ export function QuestionDialog({ examId, questionId, onClose, onSuccess }: Quest
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const target = e.target;
     const name = target.name;
-    const value = target.type === "checkbox" ? (target as HTMLInputElement).checked : target.value;
+    const value = target.type === "checkbox" ? (target as HTMLInputElement).checked
+      : ["correct", "points"].includes(name) ? Number(target.value) : target.value;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!loaded || loading) return;
     setError("");
     setLoading(true);
 
@@ -87,8 +99,8 @@ export function QuestionDialog({ examId, questionId, onClose, onSuccess }: Quest
       const variants = form.variants.trim().split("|").filter(v => v.trim()).join("|");
       const variantCount = variants.split("|").length;
       
-      if (variantCount < 2) {
-        throw new Error("Ən azı 2 variant tələb olunur (| ilə ayrılmaqla)");
+      if (variantCount < 2 || variantCount > 5) {
+        throw new Error("2–5 variant tələb olunur (| ilə ayrılmaqla)");
       }
       
       if (form.correct < 1 || form.correct > variantCount) {
@@ -99,7 +111,8 @@ export function QuestionDialog({ examId, questionId, onClose, onSuccess }: Quest
         throw new Error("Bal ən azı 1 olmalıdır");
       }
 
-      const payload = { ...form, variants };
+      const payload = { ...form, examId, variants, subject: form.subject.trim() || null,
+        topic: form.topic.trim() || null, imageUrl: form.imageUrl.trim() || null };
       const url = questionId ? `/question/${questionId}` : "/question";
       const method = questionId ? "PATCH" : "POST";
 
@@ -118,14 +131,6 @@ export function QuestionDialog({ examId, questionId, onClose, onSuccess }: Quest
     }
   };
 
-  if (loading) {
-    return (
-      <Card className="p-6">
-        <div className="animate-pulse rounded bg-muted/50 h-[200px] w-full mb-4" />
-      </Card>
-    );
-  }
-
   return (
     <Card className="max-w-2xl p-6">
       <h3 className="mb-4 text-lg font-medium">
@@ -133,12 +138,22 @@ export function QuestionDialog({ examId, questionId, onClose, onSuccess }: Quest
       </h3>
 
       {error && (
-        <div className="bg-destructive/10 text-destructive rounded p-3 mb-4">
+        <div role="alert" className="bg-destructive/10 text-destructive rounded p-3 mb-4">
           {error}
         </div>
       )}
 
+      {!loaded && !error && <p role="status">Sual yüklənir…</p>}
       <form onSubmit={handleSubmit} className="grid gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div><Label htmlFor="question-subject">Fənn</Label>
+            <Input id="question-subject" name="subject" maxLength={120} value={form.subject} onChange={handleInputChange} /></div>
+          <div><Label htmlFor="question-topic">Mövzu</Label>
+            <Input id="question-topic" name="topic" maxLength={160} value={form.topic} onChange={handleInputChange} /></div>
+        </div>
+        <div><Label htmlFor="question-image">Şəkil keçidi (HTTPS)</Label>
+          <Input id="question-image" name="imageUrl" type="url" maxLength={2048} value={form.imageUrl} onChange={handleInputChange} />
+        </div>
         <div>
           <Label htmlFor="question-text">Sual mətni</Label>
           <Textarea
@@ -209,8 +224,8 @@ export function QuestionDialog({ examId, questionId, onClose, onSuccess }: Quest
         </div>
 
         <div className="flex gap-2 pt-2">
-          <Button type="submit" disabled={loading}>
-            {questionId ? "Yadda saxla" : "Yarad"}
+          <Button type="submit" disabled={loading || !loaded}>
+            {loading ? "Saxlanılır…" : questionId ? "Yadda saxla" : "Yarad"}
           </Button>
           <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
             Ləğv et

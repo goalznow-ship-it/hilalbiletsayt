@@ -21,6 +21,6 @@ export class CreateExamDto {
   @IsString() @Length(1, 200) title!: string;
   @IsOptional() @IsString() @MaxLength(2000) description?: string;
   @IsOptional() @IsInt() @Min(0) @Max(2147483647) price?: number | null;
-  @IsOptional() @IsIn(["DRAFT"]) status?: string;
+  @IsOptional() @IsIn(["DRAFT", "PUBLISHED"]) status?: string;
   @IsOptional() @IsUUID() createdBy?: string;
 }

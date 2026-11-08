@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-ui";
 import { CreateUserDialog } from "@/components/users/create-user-dialog";
 import { RoleManagementDialog } from "@/components/users/role-management-dialog";
+import { EditUserDialog } from "@/components/users/edit-user-dialog";
 type User = {
   id: string;
   fullName: string;
@@ -25,6 +26,7 @@ export default function UsersPage() {
   const [reload, setReload] = useState(0);
   const [create, setCreate] = useState(false);
   const [roles, setRoles] = useState("");
+  const [edit, setEdit] = useState("");
   const central = user?.roles?.some((role) =>
     ["SUPER_ADMIN", "CENTRAL_ADMIN"].includes(role),
   );
@@ -74,6 +76,7 @@ export default function UsersPage() {
           onSuccess={() => setReload((value) => value + 1)}
         />
       )}
+      {edit && <EditUserDialog key={edit} userId={edit} onClose={() => setEdit("")} onSuccess={() => setReload(value => value + 1)} />}
       <div className="grid gap-4 md:grid-cols-2">
         {result?.data.map((item) => (
           <Card key={item.id} className="p-5">
@@ -83,9 +86,12 @@ export default function UsersPage() {
             <p>{item.branches.map((branch) => branch.name).join(", ")}</p>
             <p>{item.isActive ? "Aktiv" : "Passiv"}</p>
             {central && (
-              <Button variant="outline" onClick={() => setRoles(item.id)}>
+              <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => { setRoles(""); setCreate(false); setEdit(item.id); }}>Redaktə et</Button>
+              <Button variant="outline" onClick={() => { setEdit(""); setCreate(false); setRoles(item.id); }}>
                 Rolları dəyiş
               </Button>
+              </div>
             )}
           </Card>
         ))}

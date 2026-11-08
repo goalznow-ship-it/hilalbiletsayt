@@ -48,7 +48,8 @@ export function EditUserDialog({
   const [roles] = useState<RoleOption[]>(["SUPER_ADMIN", "CENTRAL_ADMIN", "BRANCH_MANAGER", "SELLER", "OMR_OPERATOR"]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [initialBranches, setInitialBranches] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,19 +60,21 @@ export function EditUserDialog({
           setForm({
             email: result.email,
             fullName: result.fullName,
-            role: (result.userBranchRoles[0]?.role.name ?? "") as RoleOption | "",
+            role: "",
             branchIds: [
               ...new Set(result.userBranchRoles.map((assignment) => assignment.branch.id)),
             ],
             isActive: result.isActive,
           });
+          setInitialBranches([...new Set(result.userBranchRoles.map(assignment => assignment.branch.id))]);
           const branchesResult = await request<Branch[]>("/branches");
           if (!cancelled && Array.isArray(branchesResult)) {
             setBranches(branchesResult);
+            setLoaded(true);
           }
         }
-      } catch (_cause) {
-        setError("İstifadəçi məlumatları alınmadı.");
+      } catch {
+        if (!cancelled) setError("İstifadəçi məlumatları alınmadı.");
       }
     };
     void fetchUser();
@@ -94,8 +97,8 @@ export function EditUserDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading || !loaded) return;
     setError("");
-    setSuccess(false);
     setLoading(true);
 
     try {
@@ -106,12 +109,11 @@ export function EditUserDialog({
           email: form.email,
           fullName: form.fullName,
           role: form.role || undefined,
-          branchIds: form.branchIds,
+          branchIds: form.branchIds.length === initialBranches.length && form.branchIds.every(id => initialBranches.includes(id)) ? undefined : form.branchIds,
           isActive: form.isActive,
         }),
       });
 
-      setSuccess(true);
       setLoading(false);
       onSuccess();
       onClose();
@@ -121,10 +123,6 @@ export function EditUserDialog({
     }
   };
 
-  useEffect(() => {
-    return () => {};
-  }, []);
-
   if (loading) {
     return (
       <Card className="p-6">
@@ -133,25 +131,21 @@ export function EditUserDialog({
     );
   }
 
-  if (success) {
-    setSuccess(false);
-    onClose();
-    return null;
-  }
-
   return (
     <Card className="max-w-lg p-6">
       <h3 className="mb-4 text-lg font-medium">İstifadəçi redaktəsi</h3>
 
       {error && (
-        <div className="bg-destructive/10 text-destructive rounded p-3 mb-4">
+        <div role="alert" className="bg-destructive/10 text-destructive rounded p-3 mb-4">
           <span className="icon-destructive" aria-hidden="true" /> <p>{error}</p>
         </div>
       )}
 
+      {!loaded && !error && <p role="status">İstifadəçi məlumatları yüklənir…</p>}
       <form onSubmit={handleSubmit} className="grid gap-4">
         <Input
           name="email"
+          aria-label="E-poçt"
           type="email"
           placeholder="Email"
           value={form.email}
@@ -160,6 +154,7 @@ export function EditUserDialog({
         />
         <Input
           name="fullName"
+          aria-label="Tam ad"
           placeholder="Tam Adı"
           value={form.fullName}
           onChange={handleChange}
@@ -168,10 +163,12 @@ export function EditUserDialog({
 
         <select
           name="role"
+          aria-label="Rol"
+          value={form.role}
           onChange={handleChange}
           className="mt-1 block w-full rounded border-input"
         >
-          <option value="">Rol seçin</option>
+          <option value="">Mövcud rolları saxla</option>
           {roles.map((role) => (
             <option key={role} value={role}>
               {role}
@@ -182,10 +179,12 @@ export function EditUserDialog({
         <select
           multiple
           name="branchIds"
+          aria-label="Filiallar"
+          value={form.branchIds}
+          required
           onChange={handleChange}
           className="mt-1 block w-full rounded border-input"
         >
-          <option value="">Filial seçin</option>
           {branches.map((b) => (
             <option key={b.id} value={b.id}>
               {b.name}
@@ -196,6 +195,7 @@ export function EditUserDialog({
         <div className="flex items-center gap-2">
           <input
             type="checkbox"
+            aria-label="İstifadəçi aktivdir"
             name="isActive"
             checked={form.isActive}
             onChange={handleChange}
@@ -204,9 +204,10 @@ export function EditUserDialog({
           <span>Aktiv</span>
         </div>
 
-        <Button type="submit" className="mt-4 w-full">
+        <Button type="submit" className="mt-4 w-full" disabled={!loaded || loading}>
           Redaktə et
         </Button>
+        <Button type="button" variant="outline" onClick={onClose}>Bağla</Button>
       </form>
     </Card>
   );

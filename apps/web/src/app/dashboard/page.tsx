@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -22,7 +23,31 @@ import { useSession } from "@/components/session-provider";
 import { useBranches } from "@/hooks/use-branches";
 
 export default function DashboardPage() {
-  const { user, selectedBranch } = useSession();
+  const { user, selectedBranch, request } = useSession();
+  const [counts, setCounts] = useState<{ key: string; users: number | null; tickets: number | null; results: number | null } | null>(null);
+  const [countsError, setCountsError] = useState("");
+  const scope = `${user?.userId ?? ""}:${selectedBranch}`;
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    const roles = user.roles ?? [];
+    const central = roles.some(role => ["SUPER_ADMIN", "CENTRAL_ADMIN"].includes(role));
+    const branch = selectedBranch ? `branchId=${encodeURIComponent(selectedBranch)}` : "";
+    Promise.all([
+      central || roles.includes("BRANCH_MANAGER") ? request<{ total: number }>(`/users?limit=1&${branch}`) : null,
+      central || roles.some(role => ["SELLER", "BRANCH_MANAGER"].includes(role))
+        ? request<Array<{ status: string; paymentStatus: string; _count: { _all: number } }>>(`/ticket/stats?${branch}`) : null,
+      central || roles.includes("OMR_OPERATOR") ? request<Array<{ completed: number }>>("/results/exams") : null,
+    ]).then(([staff, sales, results]) => {
+      if (!active) return;
+      setCounts({ key: scope, users: staff?.total ?? null,
+        tickets: sales?.filter(row => row.status !== "CANCELLED" && row.paymentStatus === "PAID").reduce((sum, row) => sum + row._count._all, 0) ?? null,
+        results: results?.reduce((sum, row) => sum + row.completed, 0) ?? null });
+      setCountsError("");
+    }).catch(cause => { if (active) setCountsError(cause instanceof Error ? cause.message : "Göstəricilər alınmadı."); });
+    return () => { active = false; };
+  }, [user, selectedBranch, request, scope]);
+  const current = counts?.key === scope ? counts : null;
   const { branches, loading, error, reload } = useBranches();
   const visible = selectedBranch
     ? branches.filter((b) => b.id === selectedBranch)
@@ -45,20 +70,23 @@ export default function DashboardPage() {
     },
     {
       title: "İşçilər və satıcılar",
-      value: "—",
-      note: "İstifadəçi modulu hazırlanır",
+      value: current?.users == null ? "—" : String(current.users),
+      note: !current ? (countsError ? "Məlumat alınmadı" : "Yüklənir…") : current.users == null ? "Rolunuz üzrə göstərici yoxdur" : "Cari iş sahəsində",
+      available: current?.users != null,
       icon: UsersRound,
     },
     {
       title: "Satılmış biletlər",
-      value: "—",
-      note: "Satış modulu hazırlanır",
+      value: current?.tickets == null ? "—" : String(current.tickets),
+      note: "Ödənilmiş və ləğv edilməmiş",
+      available: current?.tickets != null,
       icon: Ticket,
     },
     {
       title: "OMR nəticələri",
-      value: "—",
-      note: "Skan modulu hazırlanır",
+      value: current?.results == null ? "—" : String(current.results),
+      note: "Son imtahanlar üzrə tamamlanmış nəticələr",
+      available: current?.results != null,
       icon: ScanLine,
     },
   ];
@@ -115,6 +143,7 @@ export default function DashboardPage() {
           </article>
         ))}
       </section>
+      {countsError && <p role="alert">{countsError}</p>}
       <div className="dashboard-columns">
         <section className="surface branch-overview">
           <div className="section-heading">

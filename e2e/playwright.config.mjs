@@ -15,6 +15,7 @@ export default defineConfig({
     baseURL: process.env.BASE_URL ?? "http://localhost:3000",
     locale: "az-AZ",
     timezoneId: "Asia/Baku",
+    launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined },
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },

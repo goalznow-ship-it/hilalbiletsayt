@@ -107,6 +107,9 @@ model Question {
   id          String   @id @default(uuid()) @db.Uuid
   examId      String   @db.Uuid
   question    String
+  subject     String?
+  topic       String?
+  imageUrl    String?
   /// Variantlar A-E formatında saxlanyar, "|" ilə ajratılır
   variants    String   /// "A) cavab1|B) cavab2|C) cavab3|D) cavab4|E) cavab5"
   correct     Int      /// 1-indexli düzgün cavab nömrəsi (1-5)
@@ -118,6 +121,7 @@ model Question {
   exam        Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
 
   @@index([examId])
+  @@index([subject, topic])
   @@map("questions")
 }
 

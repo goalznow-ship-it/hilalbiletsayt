@@ -53,3 +53,20 @@ export function sessionDate(value: string) {
     hour12: false,
   });
 }
+
+export function sessionInputDate(value: string) {
+  const parts = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Baku", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date(value));
+  const part = (type: string) => parts.find((entry) => entry.type === type)?.value;
+  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
+}
+
+export function sessionInputToIso(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) throw new Error("Tarix və saatı düzgün daxil edin.");
+  const date = new Date(`${value}:00+04:00`);
+  if (Number.isNaN(date.getTime()) || sessionInputDate(date.toISOString()) !== value)
+    throw new Error("Tarix və saatı düzgün daxil edin.");
+  return date.toISOString();
+}

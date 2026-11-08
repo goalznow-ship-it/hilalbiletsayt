@@ -280,7 +280,7 @@ describe("Session lifecycle integration (real PostgreSQL test database)", () => 
 
     await expect(
       sessionService.update(created.id, { status: "OPEN" }),
-    ).rejects.toThrow("keçirilə bilməz");
+    ).resolves.toMatchObject({ status: "OPEN" });
   });
 
   it("refuses to cancel a session with active registrations", async () => {

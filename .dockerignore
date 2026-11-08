@@ -10,5 +10,6 @@
 **/.venv
 .env
 .env.*
-!.env.example
+**/.env
+**/.env.*
 **/storage

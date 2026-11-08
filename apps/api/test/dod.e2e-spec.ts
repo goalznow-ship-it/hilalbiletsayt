@@ -301,7 +301,13 @@ describe("DoD: published results only, protected lookup", () => {
     await http().post(`/api/results/exams/${exam.id}/publish`).set("Authorization", adminAuth).expect(201);
 
     const shown = await lookup(t1.body.qrCode, c1.candidate_number.toLowerCase()).expect(200);
-    expect(shown.body).toMatchObject({ score: 1, maximumScore: 2, correct: 1, blank: 1, wrong: 0 });
+    expect(shown.body).toMatchObject({ score: 1, maximumScore: 2, correct: 1, blank: 1, wrong: 0, rank: 2, participants: 2 });
+    const statistics = await http().get("/api/results/exams").set("Authorization", adminAuth).expect(200);
+    expect(statistics.body.find((row: { examId: string }) => row.examId === exam.id)).toMatchObject({ averagePercent: 75 });
+    const operatorB = await staff("results-operator-b@hilal.test", "OMR_OPERATOR", ids.branchB);
+    const isolated = await http().get("/api/results/exams").set("Authorization", `Bearer ${operatorB}`).expect(200);
+    expect(isolated.body.find((row: { examId: string }) => row.examId === exam.id))
+      .toMatchObject({ completed: 0, review: 0, averagePercent: null });
     expect(JSON.stringify(shown.body)).not.toContain("Leyla");
     await lookup(t1.body.code, c1.candidate_number).expect(200);
 

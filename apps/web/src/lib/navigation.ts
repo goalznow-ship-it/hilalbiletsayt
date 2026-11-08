@@ -32,7 +32,7 @@ export const navigation = [
   { href: "/dashboard/omr", label: "OMR skan", icon: ScanLine, group: "exam" as NavGroup, roles: [...CENTRAL, "BRANCH_MANAGER", "OMR_OPERATOR"] },
   { href: "/dashboard/results", label: "Nəticələr", icon: ListChecks, group: "exam" as NavGroup, roles: [...CENTRAL, "OMR_OPERATOR"] },
   { href: "/dashboard/reports", label: "Hesabatlar", icon: ChartNoAxesCombined, group: "system" as NavGroup, roles: SALES },
-  { href: "/dashboard/settings", label: "Tənzimləmələr", icon: Settings2, group: "system" as NavGroup, roles: CENTRAL, upcoming: true },
+  { href: "/dashboard/settings", label: "Tənzimləmələr", icon: Settings2, group: "system" as NavGroup, roles: CENTRAL, upcoming: false },
 ];
 
 export function visibleNavigation(roles: string[]) {

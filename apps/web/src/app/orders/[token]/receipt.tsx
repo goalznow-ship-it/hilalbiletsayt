@@ -22,7 +22,7 @@ type Ticket = {
     venue: string | null;
   } | null;
   branch: { name: string; address: string | null; phone: string | null } | null;
-  candidate: { full_name: string } | null;
+  candidate: { full_name: string; candidate_number: string } | null;
 };
 export default function Receipt({ token }: { token: string }) {
   const [ticket, setTicket] = useState<Ticket | null>(null);
@@ -79,6 +79,8 @@ export default function Receipt({ token }: { token: string }) {
               <dd>{ticket.code}</dd>
               <dt>Namizəd</dt>
               <dd>{ticket.candidate?.full_name}</dd>
+              <dt>Namizəd nömrəsi (nəticələr üçün)</dt>
+              <dd className="break-all">{ticket.candidate?.candidate_number}</dd>
               <dt>Sessiya</dt>
               <dd>{ticket.session?.sessionCode}</dd>
               <dt>Tarix və saat (Bakı)</dt>

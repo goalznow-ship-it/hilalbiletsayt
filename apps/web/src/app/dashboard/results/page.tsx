@@ -14,6 +14,7 @@ type ExamResults = {
   review: number;
   duplicate: number;
   processing: number;
+  averagePercent: number | null;
 };
 
 export default function ResultsPage() {
@@ -81,6 +82,7 @@ export default function ResultsPage() {
               <tr>
                 <th scope="col">İmtahan</th>
                 <th scope="col">Hazır</th>
+                <th scope="col">Orta nəticə</th>
                 <th scope="col">Yoxlamada</th>
                 <th scope="col">Təkrar</th>
                 <th scope="col">Vəziyyət</th>
@@ -96,6 +98,7 @@ export default function ResultsPage() {
                     {row.title}
                   </td>
                   <td>{row.completed}</td>
+                  <td>{row.averagePercent === null ? "—" : `${row.averagePercent.toFixed(1)}%`}</td>
                   <td>
                     {row.review > 0 ? (
                       <Link href="/dashboard/omr">{row.review} vərəq</Link>

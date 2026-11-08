@@ -5,7 +5,6 @@ export interface HealthResult {
   status: "ok" | "degraded";
   timestamp: string;
   database: "connected" | "disconnected";
-  details?: string;
 }
 
 @Injectable()
@@ -18,9 +17,8 @@ export class HealthService {
       // Use raw SQL query to check database connectivity
       await this.prisma.$queryRaw`SELECT 1`;
       return { status: "ok", timestamp, database: "connected" };
-    } catch (error) {
-      const details = error instanceof Error ? error.message : "unknown error";
-      return { status: "degraded", timestamp, database: "disconnected", details };
+    } catch {
+      return { status: "degraded", timestamp, database: "disconnected" };
     }
   }
 }

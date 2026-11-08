@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { type Branch, useSession } from "@/components/session-provider";
 
-export function useBranches() {
+export function useBranches(includeInactive = false) {
   const { user, request } = useSession();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,7 +22,7 @@ export function useBranches() {
       setError("");
       try {
         const result = central
-          ? await request<Branch[]>("/branches", { signal: controller.signal })
+          ? await request<Branch[]>(`/branches${includeInactive ? "?includeInactive=true" : ""}`, { signal: controller.signal })
           : await Promise.all(
               [...new Set(user.branches.map((b) => b.id))].map((id) =>
                 request<Branch>(`/branches/${encodeURIComponent(id)}`, {
@@ -41,7 +41,7 @@ export function useBranches() {
           )
         )
           throw new Error("Filial məlumatları etibarlı deyil.");
-        if (!cancelled) setBranches(result.filter((b) => b.isActive));
+        if (!cancelled) setBranches(result.filter((b) => b.isActive || (central && includeInactive)));
       } catch (cause) {
         if (!cancelled) {
           setBranches([]);
@@ -58,7 +58,7 @@ export function useBranches() {
       cancelled = true;
       controller.abort();
     };
-  }, [user, request, revision]);
+  }, [user, request, revision, includeInactive]);
   return {
     branches: user ? branches : [],
     loading: user ? loading : false,

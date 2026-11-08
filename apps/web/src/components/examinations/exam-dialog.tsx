@@ -44,7 +44,8 @@ function ExamDialogForm({ examId, onClose, onSuccess }: ExamDialogProps) {
     description: "",
     status: "DRAFT",
   });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(Boolean(examId));
+  const [loaded, setLoaded] = useState(!examId);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -54,6 +55,7 @@ function ExamDialogForm({ examId, onClose, onSuccess }: ExamDialogProps) {
         try {
           const result = await request<Exam>(`/exams/${examId}`);
           if (!cancelled) {
+            setLoaded(true);
             setForm({
               price:
                 result.price == null ? "" : (result.price / 100).toFixed(2),
@@ -65,6 +67,8 @@ function ExamDialogForm({ examId, onClose, onSuccess }: ExamDialogProps) {
           }
         } catch {
           if (!cancelled) setError("Sənəd məlumatları alınmadı.");
+        } finally {
+          if (!cancelled) setLoading(false);
         }
       };
       void fetchExam();
@@ -133,7 +137,7 @@ function ExamDialogForm({ examId, onClose, onSuccess }: ExamDialogProps) {
   return (
     <Card className="max-w-lg p-6">
       <h3 className="mb-4 text-lg font-medium">
-        {examId ? "Sənəd redaktəsi" : "Yeni sənəd yaradılışı"}
+        {examId ? "İmtahan redaktəsi" : "Yeni imtahan"}
       </h3>
 
       {error && (
@@ -185,12 +189,15 @@ function ExamDialogForm({ examId, onClose, onSuccess }: ExamDialogProps) {
           onChange={handleInputChange}
           className="mt-1 block w-full rounded border-input"
         >
-          <option value="DRAFT">Əmrlənməyib</option>
-          <option value="PUBLISHED">Yayınlanmış</option>
-          <option value="ARCHIVED">Arxivləşdirilmiş</option>
+          <option value="DRAFT">Qaralama</option>
+          <option value="PUBLISHED">Dərc edilib</option>
+          {examId && <option value="ARCHIVED">Arxivləşdirilib</option>}
         </select>
+        <p className="text-sm text-muted-foreground">
+          Bilet səhifəsində görünmək üçün qiyməti təyin edin, imtahanı dərc edin və gələcək sessiyanın satışını açın.
+        </p>
 
-        <Button type="submit" className="mt-4 w-full">
+        <Button type="submit" className="mt-4 w-full" disabled={!loaded}>
           {examId ? "Dəyişdir" : "Yadda saxla"}
         </Button>
         <Button type="button" variant="outline" onClick={onClose}>

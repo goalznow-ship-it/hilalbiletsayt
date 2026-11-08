@@ -29,6 +29,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user.isActive) {
       throw new UnauthorizedException("İstifadəçi hesabı aktiv deyil");
     }
+    if ((payload.tokenVersion ?? 0) !== user.tokenVersion) {
+      throw new UnauthorizedException("Sessiya bitib. Yenidən daxil olun");
+    }
 
     const roles = [...new Set(user.userBranchRoles.map((entry) => entry.role.name))];
 

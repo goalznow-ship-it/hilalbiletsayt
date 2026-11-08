@@ -1,6 +1,6 @@
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { publicRequest, sessionDate } from '../src/lib/public-sales.ts';
+import { publicRequest, sessionDate, sessionInputDate, sessionInputToIso } from '../src/lib/public-sales.ts';
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
 test('public sales uses one public API prefix and no login token', async () => {
@@ -26,4 +26,10 @@ test('session dates show numeric dates in Baku time', () => {
   const date = sessionDate('2026-11-01T09:00:00Z');
   assert.match(date, /01[.]11[.]2026/);
   assert.match(date, /13:00/);
+});
+test('session form values round-trip in Baku regardless of browser timezone', () => {
+  assert.equal(sessionInputDate('2026-11-06T20:00:00Z'), '2026-11-07T00:00');
+  assert.equal(sessionInputToIso('2026-11-07T00:00'), '2026-11-06T20:00:00.000Z');
+  for (const invalid of ['', '2026-02-30T12:00', '2026-11-06T25:00', '2026-11-06'])
+    assert.throws(() => sessionInputToIso(invalid));
 });

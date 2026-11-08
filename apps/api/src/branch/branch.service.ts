@@ -5,15 +5,16 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { AuditService } from "../audit/audit.service";
 
 @Injectable()
 export class BranchService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private audit: AuditService) {}
 
-  async findAll(user: AuthenticatedUser) {
+  async findAll(user: AuthenticatedUser, includeInactive = false) {
     return this.prisma.branch.findMany({
       where: {
-        isActive: true,
+        ...(includeInactive && isCentralAdmin(user) ? {} : { isActive: true }),
         ...(!isCentralAdmin(user)
           ? { id: { in: (user.branches ?? []).map((branch) => branch.id) } }
           : {}),
@@ -38,9 +39,13 @@ export class BranchService {
     address?: string;
     phone?: string;
     isActive?: boolean;
-  }) {
-    return this.prisma.branch.create({
+  }, actorId?: string) {
+    return this.prisma.$transaction(async tx => {
+    const branch = await tx.branch.create({
       data,
+    });
+    await this.audit.log("BRANCH_CREATED", actorId, "Branch", branch.id, { code: branch.code }, tx);
+    return branch;
     });
   }
 
@@ -53,10 +58,15 @@ export class BranchService {
       phone?: string;
       isActive?: boolean;
     }>,
+    actorId?: string,
   ) {
-    return this.prisma.branch.update({
+    return this.prisma.$transaction(async tx => {
+    const branch = await tx.branch.update({
       where: { id },
       data,
+    });
+    await this.audit.log("BRANCH_UPDATED", actorId, "Branch", id, { fields: Object.keys(data), isActive: branch.isActive }, tx);
+    return branch;
     });
   }
 }

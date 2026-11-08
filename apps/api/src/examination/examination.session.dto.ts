@@ -57,6 +57,10 @@ export class CreateExamSessionDto {
 }
 
 export class UpdateExamSessionDto {
+  @IsOptional() @IsDateString() startsAt?: string;
+  @IsOptional() @IsDateString() endsAt?: string;
+  @IsOptional() @IsString() @MaxLength(200) venue?: string;
+
   @Type(() => Number)
   @IsInt()
   @Min(1)

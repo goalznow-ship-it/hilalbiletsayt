@@ -16,7 +16,11 @@ import {
   isCentralAdmin,
   candidateVisibilityWhere,
   getSalesBranchIds,
+  getBranchIds,
 } from "../auth/authorization";
+import type { Prisma } from "@prisma/client";
+import { isIsoDate } from "../common/business-date";
+import { omrXlsx } from "../omr/omr.xlsx";
 import { isValidQepikPrice } from "../common/money";
 import { rethrowDbError } from "../common/db-errors";
 import {
@@ -147,18 +151,9 @@ export class TicketService {
     // Branch scoping: sellers and managers only see their own branches' sales.
     if (!isCentralAdmin(user)) {
       const branchIds = getSalesBranchIds(user);
-      where.OR = [
-        { branchId: { in: branchIds } },
-        {
-          candidate: {
-            registrations: {
-              some: {
-                branch_id: { in: branchIds },
-              },
-            },
-          },
-        },
-      ];
+      where.branchId = {
+        in: filters.branchId ? branchIds.filter((id) => id === filters.branchId) : branchIds,
+      };
     }
 
     const [rows, total] = await Promise.all([
@@ -230,16 +225,7 @@ export class TicketService {
 
     // A candidate registered in one of the user's branches may be visible even
     // when the ticket itself is not assigned to that branch.
-    if (ticket.candidateId && branchIds.length > 0) {
-      const candidateHasAccess =
-        await this.prisma.examinationRegistration.count({
-          where: {
-            candidate_id: ticket.candidateId,
-            branch_id: { in: branchIds },
-          },
-        });
-      if (candidateHasAccess > 0) return;
-    }
+    // Candidate visibility never grants access to another branch's sale.
 
     throw new ForbiddenException("Bu biletə icazəniz yoxdur");
   }
@@ -272,7 +258,7 @@ export class TicketService {
     if (data.sessionId) {
       const session = await this.prisma.examSession.findUnique({
         where: { id: data.sessionId },
-        select: { id: true, status: true, examId: true, capacity: true },
+        select: { id: true, status: true, examId: true, capacity: true, startsAt: true },
       });
       if (!session) {
         throw new NotFoundException("Sessiya tapılmadı");
@@ -280,7 +266,7 @@ export class TicketService {
       if (session.examId !== data.examId) {
         throw new BadRequestException("Sessiya seçilmiş imtahanla uyuşmur");
       }
-      if (session.status !== "OPEN") {
+      if (session.status !== "OPEN" || session.startsAt <= new Date()) {
         throw new BadRequestException("Sessiya satış üçün açıq deyil");
       }
     }
@@ -350,12 +336,12 @@ export class TicketService {
 
         const session = await tx.examSession.findUnique({
           where: { id: data.sessionId },
-          select: { status: true, capacity: true, examId: true },
+          select: { status: true, capacity: true, examId: true, startsAt: true },
         });
         if (!session) {
           throw new NotFoundException("Sessiya tapılmadı");
         }
-        if (session.status !== "OPEN") {
+        if (session.status !== "OPEN" || session.startsAt <= new Date()) {
           throw new BadRequestException("Sessiya satış üçün açıq deyil");
         }
         if (session.examId !== data.examId) {
@@ -521,7 +507,7 @@ export class TicketService {
         where: { id: ticketId, status: "ACTIVE", paymentStatus: "PENDING" },
         data: {
           paymentStatus: "PAID",
-          paymentMethod: "CASH",
+          paymentMethod: ticket.paymentMethod ?? "CASH",
           paymentDate: new Date(),
         },
       });
@@ -567,7 +553,8 @@ export class TicketService {
 
     // Mark ticket as used. The conditional update is atomic: of two
     // concurrent scans exactly one sees status ACTIVE.
-    const claimed = await this.prisma.ticket.updateMany({
+    return this.prisma.$transaction(async (tx) => {
+    const claimed = await tx.ticket.updateMany({
       where: {
         id: ticketId,
         status: "ACTIVE",
@@ -577,15 +564,15 @@ export class TicketService {
         ],
       },
       data: { status: "USED", usedAt: new Date(), usedBy: user.userId },
-    }).catch(rethrowDbError);
+    });
     if (!claimed.count)
       throw new ConflictException(
         "Bilet artıq istifadə edilib və ya ləğv olunub",
       );
     await this.audit.log("TICKET_USED", user.userId, "Ticket", ticketId, {
       branchId: ticket.branchId,
-    });
-    const updated = await this.prisma.ticket.findUniqueOrThrow({
+    }, tx);
+    const updated = await tx.ticket.findUniqueOrThrow({
       where: { id: ticketId },
       include: {
         exam: { select: { id: true, code: true, title: true } },
@@ -602,6 +589,7 @@ export class TicketService {
       ...mapTicketView(updated),
       used: true,
     };
+    }).catch(rethrowDbError);
   }
 
   async cancel(ticketId: string, user: AuthenticatedUser) {
@@ -679,6 +667,64 @@ export class TicketService {
         cancelled: true,
       };
     }).catch(rethrowDbError);
+  }
+
+  async refund(ticketId: string, user: AuthenticatedUser) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "tickets" WHERE "id" = ${ticketId}::uuid FOR UPDATE`;
+      const ticket = await tx.ticket.findUnique({ where: { id: ticketId } });
+      if (!ticket) throw new NotFoundException("Bilet tapılmadı");
+      if (!isCentralAdmin(user) && !getBranchIds(user).includes(ticket.branchId ?? ""))
+        throw new ForbiddenException("Bu filialda ödənişi qaytarmaq icazəniz yoxdur");
+      if (ticket.paymentStatus !== "PAID" || ticket.status === "USED")
+        throw new ConflictException("Yalnız ödənilmiş, istifadə edilməmiş bilet qaytarıla bilər");
+      await tx.ticket.update({ where: { id: ticketId }, data: { status: "CANCELLED", paymentStatus: "REFUNDED" } });
+      await this.audit.log("TICKET_REFUNDED", user.userId, "Ticket", ticketId,
+        { price: ticket.price, branchId: ticket.branchId, paymentMethod: ticket.paymentMethod }, tx);
+      return { refunded: true };
+    }).catch(rethrowDbError);
+  }
+
+  private reportWhere(filters: TicketQueryDto, user: AuthenticatedUser): Prisma.TicketWhereInput {
+    if ([filters.from, filters.to].some(value => value !== undefined && !isIsoDate(value)) ||
+      (filters.from && filters.to && filters.from > filters.to))
+      throw new BadRequestException("Hesabat tarixlərini yoxlayın");
+    return {
+      ...(filters.examId ? { examId: filters.examId } : {}),
+      ...(filters.sessionId ? { sessionId: filters.sessionId } : {}),
+      ...(filters.sellerId ? { sellerId: filters.sellerId } : {}),
+      ...(filters.branchId ? { branchId: filters.branchId } : {}),
+      ...(!isCentralAdmin(user) ? { branchId: { in: getSalesBranchIds(user).filter(id => !filters.branchId || id === filters.branchId) } } : {}),
+      registeredAt: {
+        ...(filters.from ? { gte: new Date(`${filters.from}T00:00:00+04:00`) } : {}),
+        ...(filters.to ? { lt: new Date(new Date(`${filters.to}T00:00:00+04:00`).getTime() + 86400000) } : {}),
+      },
+    };
+  }
+
+  async salesReport(filters: TicketQueryDto, user: AuthenticatedUser) {
+    const groups = await this.prisma.ticket.groupBy({
+      by: ["branchId", "sellerId", "paymentMethod", "status", "paymentStatus"],
+      where: this.reportWhere(filters, user), _count: { _all: true }, _sum: { price: true },
+    });
+    const branchIds = groups.flatMap(row => row.branchId ? [row.branchId] : []);
+    const sellerIds = groups.flatMap(row => row.sellerId ? [row.sellerId] : []);
+    const [branches, sellers] = await Promise.all([
+      this.prisma.branch.findMany({ where: { id: { in: branchIds } }, select: { id: true, name: true } }),
+      this.prisma.user.findMany({ where: { id: { in: sellerIds } }, select: { id: true, fullName: true } }),
+    ]);
+    return { rows: groups.map(row => ({
+      branchId: row.branchId, branchName: branches.find(branch => branch.id === row.branchId)?.name ?? "—",
+      sellerId: row.sellerId, sellerName: sellers.find(seller => seller.id === row.sellerId)?.fullName ?? "Onlayn sifariş",
+      paymentMethod: row.paymentMethod, status: row.status, paymentStatus: row.paymentStatus,
+      count: row._count._all, amount: row._sum.price ?? 0,
+    })) };
+  }
+
+  async salesXlsx(filters: TicketQueryDto, user: AuthenticatedUser) {
+    const { rows } = await this.salesReport(filters, user);
+    return omrXlsx([["Filial", "Satıcı", "Ödəniş üsulu", "Bilet statusu", "Ödəniş statusu", "Bilet sayı", "Məbləğ (AZN)"],
+      ...rows.map(row => [row.branchName, row.sellerName, row.paymentMethod ?? "", row.status, row.paymentStatus, row.count, row.amount / 100])]);
   }
 
   /** Entry scan at the exam door: signed QR -> admit exactly once. */
