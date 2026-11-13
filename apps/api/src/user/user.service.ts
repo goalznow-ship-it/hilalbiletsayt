@@ -5,6 +5,8 @@ import {
 } from "../auth/authorization";
 import {
   Injectable,
+  BadRequestException,
+  ConflictException,
   UnauthorizedException,
   ForbiddenException,
 } from "@nestjs/common";
@@ -12,6 +14,11 @@ import { PrismaService } from "../prisma/prisma.service";
 import * as argon2 from "argon2";
 import { AuditService } from "../audit/audit.service";
 import { CreateUserDto, UpdateUserDto } from "../dto/create-user.dto";
+import type { Prisma } from "@prisma/client";
+
+type AssignedUser = { id: string; isActive: boolean; userBranchRoles: Array<{
+  branchId: string; roleId: string; role: { name: string };
+}> };
 
 @Injectable()
 export class UserService {
@@ -20,15 +27,50 @@ export class UserService {
     private auditLog: AuditService,
   ) {}
 
+  private async checkBranches(tx: Prisma.TransactionClient, branchIds: string[]) {
+    if (!branchIds.length || await tx.branch.count({ where: { id: { in: branchIds }, isActive: true } }) !== branchIds.length)
+      throw new BadRequestException("Mövcud və aktiv filial seçin.");
+  }
+
+  private async replaceAssignments(tx: Prisma.TransactionClient, user: AssignedUser, assignments: Array<{ branchId: string; roleId: string }>) {
+    if (!assignments.length) throw new BadRequestException("Ən azı bir filial və rol saxlayın. Girişi bağlamaq üçün hesabı deaktiv edin.");
+    const superRole = user.userBranchRoles.find(entry => entry.role.name === "SUPER_ADMIN");
+    if (user.isActive && superRole && !assignments.some(entry => entry.roleId === superRole.roleId)) {
+      const others = await tx.user.count({ where: { id: { not: user.id }, isActive: true,
+        userBranchRoles: { some: { role: { name: "SUPER_ADMIN" } } } } });
+      if (!others) throw new ForbiddenException("Son aktiv SUPER_ADMIN rolunu silmək olmaz.");
+    }
+    const before = new Set(user.userBranchRoles.map(entry => `${entry.branchId}:${entry.roleId}`));
+    if (before.size === assignments.length && assignments.every(entry => before.has(`${entry.branchId}:${entry.roleId}`))) return;
+    await tx.userBranchRole.deleteMany({ where: { userId: user.id } });
+    await tx.userBranchRole.createMany({ data: assignments.map(entry => ({ userId: user.id, ...entry })) });
+    await tx.user.update({ where: { id: user.id }, data: { tokenVersion: { increment: 1 } } });
+  }
+
+  private assignmentsForBranches(user: AssignedUser, branchIds: string[]) {
+    const retained = user.userBranchRoles.filter(entry => branchIds.includes(entry.branchId));
+    const added = branchIds.filter(id => !user.userBranchRoles.some(entry => entry.branchId === id));
+    const roleIds = [...new Set(user.userBranchRoles.map(entry => entry.roleId))];
+    const existingBranches = [...new Set(user.userBranchRoles.map(entry => entry.branchId))];
+    if (added.length && (!roleIds.length || existingBranches.some(id =>
+      roleIds.some(roleId => !user.userBranchRoles.some(entry => entry.branchId === id && entry.roleId === roleId)))))
+      throw new BadRequestException("Yeni filialın rolunu “Rolları dəyiş” bölməsində ayrıca seçin.");
+    return [...retained.map(({ branchId, roleId }) => ({ branchId, roleId })),
+      ...added.flatMap(branchId => roleIds.map(roleId => ({ branchId, roleId })))];
+  }
+
   async create(data: CreateUserDto, actorId?: string) {
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRawUnsafe("SELECT pg_advisory_xact_lock(724901)::text");
+      const branchIds = [...new Set(data.branchIds)];
+      await this.checkBranches(tx, branchIds);
       // Check if user already exists with this email
-      const existingUser = await tx.user.findUnique({
-        where: { email: data.email },
+      const existingUser = await tx.user.findFirst({
+        where: { email: { equals: data.email, mode: "insensitive" } },
       });
 
       if (existingUser) {
-        throw new ForbiddenException("Bu email vasitesi yoxdur");
+        throw new ConflictException("Bu e-poçt ünvanı ilə istifadəçi artıq mövcuddur.");
       }
 
       // Hash password
@@ -46,13 +88,13 @@ export class UserService {
       });
 
       // Create user-branch-role assignments separately
-      if (data.branchIds.length > 0) {
+      if (branchIds.length > 0) {
         const roleName = data.role || "SELLER";
         const role = await tx.role.findUniqueOrThrow({
           where: { name: roleName },
         });
         await tx.userBranchRole.createMany({
-          data: data.branchIds.map((branchId: string) => ({
+          data: branchIds.map((branchId: string) => ({
             userId: user.id,
             branchId,
             roleId: role.id,
@@ -114,16 +156,14 @@ export class UserService {
       where.isActive = false;
     }
 
-    if (filters?.branchId) {
-      where.userBranchRoles = {
-        some: { branchId: filters.branchId },
-      };
-    }
-
-    if (filters?.roleId) {
-      where.userBranchRoles = {
-        some: { ...where.userBranchRoles?.some, roleId: filters.roleId },
-      };
+    const scopedBranches = user && !isCentralAdmin(user) ? getBranchIds(user) : null;
+    if (filters?.branchId || filters?.roleId || scopedBranches) {
+      where.userBranchRoles = { some: {
+        ...(scopedBranches ? { branchId: { in: scopedBranches.filter(id => !filters?.branchId || id === filters.branchId) } }
+          : filters?.branchId ? { branchId: filters.branchId } : {}),
+        ...(filters?.roleId ? /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(filters.roleId)
+          ? { roleId: filters.roleId } : { role: { name: filters.roleId } } : {}),
+      } };
     }
 
     if (filters?.search) {
@@ -161,8 +201,9 @@ export class UserService {
         email: u.email,
         fullName: u.fullName,
         isActive: u.isActive,
-        roles: u.userBranchRoles.map((ubr: any) => ubr.role.name),
-        branches: u.userBranchRoles.map((ubr: any) => ubr.branch),
+        roles: [...new Set(u.userBranchRoles.map(ubr => ubr.role.name))],
+        branches: [...new Map(u.userBranchRoles.map(ubr => [ubr.branchId, ubr.branch])).values()],
+        assignments: u.userBranchRoles.map(ubr => ({ branchId: ubr.branchId, role: ubr.role.name })),
         createdAt: u.createdAt,
         updatedAt: u.updatedAt,
       })),
@@ -209,18 +250,18 @@ export class UserService {
 
       // Check if email is being changed and if new email already exists
       if (data.email && data.email !== existingUser.email) {
-        const emailExists = await tx.user.findUnique({
-          where: { email: data.email },
+        const emailExists = await tx.user.findFirst({
+          where: { id: { not: id }, email: { equals: data.email, mode: "insensitive" } },
         });
 
         if (emailExists) {
-          throw new ForbiddenException("Bu email vasitesi yoxdur");
+          throw new ConflictException("Bu e-poçt ünvanı ilə istifadəçi artıq mövcuddur.");
         }
       }
 
       if (
         (data.isActive === false || (data.role !== undefined && data.role !== "SUPER_ADMIN")) &&
-        existingUser.userBranchRoles.some(
+        existingUser.isActive && existingUser.userBranchRoles.some(
           (entry) => entry.role.name === "SUPER_ADMIN",
         )
       ) {
@@ -246,14 +287,11 @@ export class UserService {
 
       if (data.role !== undefined || data.branchIds !== undefined) {
         const branchIds = [...new Set(data.branchIds ?? existingUser.userBranchRoles.map(entry => entry.branchId))];
-        if (!branchIds.length || await tx.branch.count({ where: { id: { in: branchIds }, isActive: true } }) !== branchIds.length)
-          throw new ForbiddenException("Aktiv filial seçin");
-        const roleIds = data.role
-          ? [(await tx.role.findUniqueOrThrow({ where: { name: data.role } })).id]
-          : [...new Set(existingUser.userBranchRoles.map(entry => entry.roleId))];
-        if (!roleIds.length) throw new ForbiddenException("Rol seçin");
-        await tx.userBranchRole.deleteMany({ where: { userId: id } });
-        await tx.userBranchRole.createMany({ data: branchIds.flatMap(branchId => roleIds.map(roleId => ({ userId: id, branchId, roleId }))) });
+        await this.checkBranches(tx, branchIds);
+        const role = data.role ? await tx.role.findUniqueOrThrow({ where: { name: data.role } }) : null;
+        const assignments = role ? branchIds.map(branchId => ({ branchId, roleId: role.id }))
+          : this.assignmentsForBranches(existingUser, branchIds);
+        await this.replaceAssignments(tx, existingUser, assignments);
       }
 
       const user = await tx.user.update({
@@ -368,29 +406,11 @@ export class UserService {
         throw new ForbiddenException("İstifadəçi tapılmadı");
       }
 
-      if (!branchIds.length)
-        throw new ForbiddenException("Ən azı bir filial seçin");
-      const retainedRoles = [
-        ...new Set(user.userBranchRoles.map((entry) => entry.roleId)),
-      ];
+      branchIds = [...new Set(branchIds)];
+      await this.checkBranches(tx, branchIds);
       // Remove existing branch assignments
-      await tx.userBranchRole.deleteMany({
-        where: { userId },
-      });
-
       // Assign new branches
-      const sellerRole = await tx.role.findUniqueOrThrow({
-        where: { name: "SELLER" },
-      });
-      if (branchIds.length > 0) {
-        await tx.userBranchRole.createMany({
-          data: branchIds.flatMap((branchId: string) =>
-            (retainedRoles.length ? retainedRoles : [sellerRole.id]).map(
-              (roleId) => ({ userId, branchId, roleId }),
-            ),
-          ),
-        });
-      }
+      await this.replaceAssignments(tx, user, this.assignmentsForBranches(user, branchIds));
 
       // Refresh the user data
       const updatedUser = (await tx.user.findUnique({
@@ -420,7 +440,7 @@ export class UserService {
     });
   }
 
-  async assignRoles(userId: string, roleIds: string[], actorId?: string) {
+  async assignRoles(userId: string, roleIds: string[], actorId?: string, branchId?: string) {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRawUnsafe("SELECT pg_advisory_xact_lock(724901)::text");
       const user = await tx.user.findUnique({
@@ -436,33 +456,12 @@ export class UserService {
         throw new ForbiddenException("İstifadəçi tapılmadı");
       }
 
-      if (
-        user.userBranchRoles.some(
-          (entry) => entry.role.name === "SUPER_ADMIN",
-        ) &&
-        !roleIds.includes("SUPER_ADMIN") &&
-        !roleIds.includes(
-          user.userBranchRoles.find(
-            (entry) => entry.role.name === "SUPER_ADMIN",
-          )!.roleId,
-        )
-      ) {
-        const others = await tx.user.count({
-          where: {
-            id: { not: userId },
-            isActive: true,
-            userBranchRoles: { some: { role: { name: "SUPER_ADMIN" } } },
-          },
-        });
-        if (!others)
-          throw new ForbiddenException(
-            "Son aktiv SUPER_ADMIN rolunu silmək olmaz",
-          );
-      }
+      roleIds = [...new Set(roleIds)];
+      if (!roleIds.length) throw new BadRequestException("Ən azı bir rol seçin. Girişi bağlamaq üçün hesabı deaktiv edin.");
       const roles = await tx.role.findMany({
         where: {
           OR: [
-            { id: { in: roleIds.filter((id) => /^[0-9a-f-]{36}$/i.test(id)) } },
+            { id: { in: roleIds.filter((id) => /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) } },
             { name: { in: roleIds } },
           ],
         },
@@ -470,28 +469,15 @@ export class UserService {
       if (roles.length !== new Set(roleIds).size)
         throw new ForbiddenException("Rol tapılmadı");
 
+      const branchIds = branchId ? [branchId] : [...new Set(user.userBranchRoles.map(entry => entry.branchId))];
+      await this.checkBranches(tx, branchIds);
+
       // Remove existing role assignments across all branches
-      await tx.userBranchRole.deleteMany({
-        where: { userId },
-      });
-
       // Assign new roles per branch
-      if (roleIds.length > 0) {
-        const branchIds = [
-          ...new Set(user.userBranchRoles.map((ubr: any) => ubr.branchId)),
-        ];
-        const newAssignments = roles.flatMap(({ id: roleId }) =>
-          branchIds.map((branchId: string) => ({
-            userId,
-            branchId,
-            roleId,
-          })),
-        );
-
-        await tx.userBranchRole.createMany({
-          data: newAssignments,
-        });
-      }
+      const retained = branchId ? user.userBranchRoles.filter(entry => entry.branchId !== branchId)
+        .map(({ branchId, roleId }) => ({ branchId, roleId })) : [];
+      const newAssignments = roles.flatMap(({ id: roleId }) => branchIds.map(branchId => ({ branchId, roleId })));
+      await this.replaceAssignments(tx, user, [...retained, ...newAssignments]);
 
       // Refresh the user data
       const updatedUser = (await tx.user.findUnique({
@@ -512,6 +498,7 @@ export class UserService {
         {
           email: updatedUser.email,
           roleIds,
+          branchId,
           branchCount: user.userBranchRoles.length,
         },
         tx,

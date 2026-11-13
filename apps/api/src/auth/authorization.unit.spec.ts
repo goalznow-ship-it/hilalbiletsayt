@@ -5,6 +5,8 @@ import {
   assertBranchAllowed,
   getBranchIds,
   isCentralAdmin,
+  effectiveAssignments,
+  getSalesBranchIds,
 } from "./authorization";
 
 function contextFor(user: any): any {
@@ -91,4 +93,18 @@ it("does not turn a seller branch assignment into branch-manager access", () => 
   };
   expect(getBranchIds(user)).toEqual(["managed"]);
   expect(() => assertBranchAllowed(user, "sales")).toThrow(ForbiddenException);
+});
+
+it("ignores inactive branch roles while retaining global administrators", () => {
+  const assignments = [
+    { role: { name: "SELLER" }, branch: { isActive: false } },
+    { role: { name: "OMR_OPERATOR" }, branch: { isActive: true } },
+    { role: { name: "CENTRAL_ADMIN" }, branch: { isActive: false } },
+    { role: { name: "SUPER_ADMIN" }, branch: { isActive: false } },
+  ];
+  expect(effectiveAssignments(assignments).map(entry => entry.role.name)).toEqual(["OMR_OPERATOR", "CENTRAL_ADMIN", "SUPER_ADMIN"]);
+});
+
+it("does not infer sales access from an unrelated branch membership", () => {
+  expect(getSalesBranchIds({ userId: "operator", roles: ["OMR_OPERATOR"], branches: [{ id: "a" }] })).toEqual([]);
 });

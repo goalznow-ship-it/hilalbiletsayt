@@ -12,6 +12,11 @@ export const CANDIDATE_MANAGER_ROLES = [
 export const SALES_ROLES = ["BRANCH_MANAGER", "SELLER"];
 export const TICKET_SELLER_ROLES = [...CENTRAL_ADMIN_ROLES, ...SALES_ROLES];
 
+/** Central roles are global; branch roles require an active branch. */
+export function effectiveAssignments<T extends { role: { name: string }; branch: { isActive: boolean } }>(assignments: T[]): T[] {
+  return assignments.filter(entry => entry.branch.isActive || CENTRAL_ADMIN_ROLES.includes(entry.role.name));
+}
+
 export type AuthenticatedUser = {
   userId: string;
   email?: string;
@@ -40,7 +45,7 @@ export function getBranchIdsForRoles(
     ? user.userBranchRoles
         .filter((entry) => roles.includes(entry.role))
         .map((entry) => entry.branchId)
-    : (user?.branches ?? []).map((branch) => branch.id);
+    : hasAnyRole(user, roles) ? (user?.branches ?? []).map((branch) => branch.id) : [];
   return [...new Set(ids.filter(Boolean))];
 }
 

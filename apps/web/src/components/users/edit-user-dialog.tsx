@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useSession } from "@/components/session-provider";
 import { Input } from "@/components/ui/input";
+import { roleLabels, roleDescriptions } from "@/lib/navigation";
 
-type Branch = { id: string; name: string };
+type Branch = { id: string; name: string; isActive: boolean };
 type RoleOption = "SUPER_ADMIN" | "CENTRAL_ADMIN" | "BRANCH_MANAGER" | "SELLER" | "OMR_OPERATOR";
 
 interface EditUserForm {
@@ -67,7 +68,7 @@ export function EditUserDialog({
             isActive: result.isActive,
           });
           setInitialBranches([...new Set(result.userBranchRoles.map(assignment => assignment.branch.id))]);
-          const branchesResult = await request<Branch[]>("/branches");
+          const branchesResult = await request<Branch[]>("/branches?includeInactive=true");
           if (!cancelled && Array.isArray(branchesResult)) {
             setBranches(branchesResult);
             setLoaded(true);
@@ -106,8 +107,8 @@ export function EditUserDialog({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: form.email,
-          fullName: form.fullName,
+          email: form.email.trim(),
+          fullName: form.fullName.trim(),
           role: form.role || undefined,
           branchIds: form.branchIds.length === initialBranches.length && form.branchIds.every(id => initialBranches.includes(id)) ? undefined : form.branchIds,
           isActive: form.isActive,
@@ -118,7 +119,7 @@ export function EditUserDialog({
       onSuccess();
       onClose();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Dəqəcə xəta.");
+      setError(cause instanceof Error ? cause.message : "İstifadəçi məlumatları saxlanılmadı.");
       setLoading(false);
     }
   };
@@ -155,15 +156,18 @@ export function EditUserDialog({
         <Input
           name="fullName"
           aria-label="Tam ad"
-          placeholder="Tam Adı"
+          placeholder="Tam adı"
+          minLength={2}
+          maxLength={200}
           value={form.fullName}
           onChange={handleChange}
           required
         />
 
+        <p className="text-sm text-muted-foreground">Burada seçilən rol bütün seçilmiş filiallara tətbiq olunur. Filiallara fərqli rollar vermək üçün “Rolları dəyiş” bölməsini açın.</p>
         <select
           name="role"
-          aria-label="Rol"
+          aria-label="Bütün seçilmiş filiallar üçün rol"
           value={form.role}
           onChange={handleChange}
           className="mt-1 block w-full rounded border-input"
@@ -171,10 +175,12 @@ export function EditUserDialog({
           <option value="">Mövcud rolları saxla</option>
           {roles.map((role) => (
             <option key={role} value={role}>
-              {role}
+              {roleLabels[role]}
             </option>
           ))}
         </select>
+
+        {form.role && <p className="text-sm text-muted-foreground">{roleDescriptions[form.role]}</p>}
 
         <select
           multiple
@@ -186,8 +192,8 @@ export function EditUserDialog({
           className="mt-1 block w-full rounded border-input"
         >
           {branches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
+            <option key={b.id} value={b.id} disabled={!b.isActive && !initialBranches.includes(b.id)}>
+              {b.name}{!b.isActive ? " (passiv)" : ""}
             </option>
           ))}
         </select>

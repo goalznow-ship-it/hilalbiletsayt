@@ -8,12 +8,14 @@ import { PageHeader } from "@/components/page-ui";
 import { CreateUserDialog } from "@/components/users/create-user-dialog";
 import { RoleManagementDialog } from "@/components/users/role-management-dialog";
 import { EditUserDialog } from "@/components/users/edit-user-dialog";
+import { roleLabels, roleDescriptions } from "@/lib/navigation";
 type User = {
   id: string;
   fullName: string;
   email: string;
   roles: string[];
-  branches: { id: string; name: string }[];
+  branches: { id: string; name: string; isActive: boolean }[];
+  assignments: { branchId: string; role: string }[];
   isActive: boolean;
 };
 export default function UsersPage() {
@@ -22,7 +24,8 @@ export default function UsersPage() {
     null,
   );
   const [error, setError] = useState("");
-  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ branch: "", page: 1 });
+  const page = pagination.branch === selectedBranch ? pagination.page : 1;
   const [reload, setReload] = useState(0);
   const [create, setCreate] = useState(false);
   const [roles, setRoles] = useState("");
@@ -30,8 +33,9 @@ export default function UsersPage() {
   const central = user?.roles?.some((role) =>
     ["SUPER_ADMIN", "CENTRAL_ADMIN"].includes(role),
   );
+  const canView = central || user?.roles?.includes("BRANCH_MANAGER");
   useEffect(() => {
-    if (!user) return;
+    if (!user || !canView) return;
     let active = true;
     request<{ data: User[]; total: number }>(
       `/users?page=${page}${selectedBranch ? `&branchId=${selectedBranch}` : ""}`,
@@ -48,18 +52,25 @@ export default function UsersPage() {
     return () => {
       active = false;
     };
-  }, [user, request, selectedBranch, page, reload]);
+  }, [user, canView, request, selectedBranch, page, reload]);
   if (initializing) return <p role="status">Yüklənir…</p>;
   if (!user) return <Link href="/login">İdarəetmə panelinə daxil olun</Link>;
+  if (!canView) return <p role="alert">İstifadəçi siyahısına baxmaq üçün icazəniz yoxdur.</p>;
   return (
     <>
       <PageHeader
         title="İstifadəçilər və rollar"
-        description="İcazəniz olan istifadəçilər"
+        description={central ? "Hesabları və hər filial üzrə səlahiyyətləri idarə edin." : "İdarə etdiyiniz filialların işçiləri. Dəyişiklikləri mərkəzi administrator edir."}
       />
+      <details className="mb-6 rounded-lg border border-border p-4">
+        <summary className="cursor-pointer font-medium">Rollar nə edə bilər?</summary>
+        <dl className="mt-4 space-y-3">{Object.entries(roleLabels).map(([role, label]) => <div key={role}>
+          <dt className="font-medium">{label}</dt><dd className="text-sm text-muted-foreground">{roleDescriptions[role]}</dd>
+        </div>)}</dl>
+      </details>
       {error && <p role="alert">{error}</p>}
       {central && (
-        <Button className="mb-6" onClick={() => setCreate(true)}>
+        <Button className="mb-6" onClick={() => { setEdit(""); setRoles(""); setCreate(true); }}>
           Yeni istifadəçi
         </Button>
       )}
@@ -71,6 +82,7 @@ export default function UsersPage() {
       )}
       {roles && (
         <RoleManagementDialog
+          key={roles}
           userId={roles}
           onClose={() => setRoles("")}
           onSuccess={() => setReload((value) => value + 1)}
@@ -82,8 +94,10 @@ export default function UsersPage() {
           <Card key={item.id} className="p-5">
             <h2>{item.fullName}</h2>
             <p>{item.email}</p>
-            <p>{item.roles.join(", ")}</p>
-            <p>{item.branches.map((branch) => branch.name).join(", ")}</p>
+            <p>{item.roles.map(role => roleLabels[role] ?? role).join(", ")}</p>
+            <ul className="my-2 space-y-1 text-sm text-muted-foreground">{item.branches.map(branch => <li key={branch.id}>
+              {branch.name}{branch.isActive === false ? " (passiv)" : ""}: {(item.assignments ?? []).filter(entry => entry.branchId === branch.id).map(entry => roleLabels[entry.role] ?? entry.role).join(", ")}
+            </li>)}</ul>
             <p>{item.isActive ? "Aktiv" : "Passiv"}</p>
             {central && (
               <div className="flex flex-wrap gap-2">
@@ -100,13 +114,13 @@ export default function UsersPage() {
       <div className="my-6 flex gap-4">
         <Button
           disabled={page <= 1}
-          onClick={() => setPage((value) => value - 1)}
+          onClick={() => setPagination({ branch: selectedBranch, page: page - 1 })}
         >
           Əvvəlki
         </Button>
         <Button
           disabled={!result || page * 20 >= result.total}
-          onClick={() => setPage((value) => value + 1)}
+          onClick={() => setPagination({ branch: selectedBranch, page: page + 1 })}
         >
           Növbəti
         </Button>

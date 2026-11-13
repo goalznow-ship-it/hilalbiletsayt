@@ -8,6 +8,7 @@ import {
   Post,
   UseGuards,
   Query,
+  ParseUUIDPipe,
 } from "@nestjs/common";
 import { ApiOperation, ApiResponse, ApiTags, ApiQuery } from "@nestjs/swagger";
 import { AuthGuard } from "@nestjs/passport";
@@ -22,6 +23,8 @@ import {
   CreateUserDto,
   UpdateUserDto,
   PasswordResetDto,
+  AssignRolesDto,
+  UserFiltersDto,
 } from "../dto/create-user.dto";
 
 @ApiTags("users")
@@ -73,7 +76,10 @@ export class UserController {
   @ApiResponse({ status: 403, description: "Insufficient permissions" })
   @ApiResponse({ status: 401, description: "Unauthenticated" })
   async list(@Query() queries: any, @CurrentUser() user: AuthenticatedUser) {
-    return this.userService.findAll(queries, user);
+    const parsed = UserFiltersDto.safeParse(queries);
+    if (!parsed.success) throw new BadRequestException("İstifadəçi süzgəcləri düzgün deyil.");
+    const { branch, role, ...filters } = parsed.data;
+    return this.userService.findAll({ ...filters, branchId: filters.branchId ?? branch, roleId: filters.roleId ?? role }, user);
   }
 
   @UseGuards(AuthGuard("jwt"), RolesGuard, BranchGuard)
@@ -84,7 +90,7 @@ export class UserController {
   @ApiResponse({ status: 403, description: "Insufficient permissions" })
   @ApiResponse({ status: 404, description: "User not found" })
   @ApiResponse({ status: 401, description: "Unauthenticated" })
-  async getOne(@Param("id") id: string) {
+  async getOne(@Param("id", ParseUUIDPipe) id: string) {
     return this.userService.findOne(id);
   }
 
@@ -97,7 +103,7 @@ export class UserController {
   @ApiResponse({ status: 403, description: "Insufficient permissions" })
   @ApiResponse({ status: 401, description: "Unauthenticated" })
   async update(
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: unknown,
     @CurrentUser() user: AuthenticatedUser,
   ) {
@@ -119,7 +125,7 @@ export class UserController {
   })
   @ApiResponse({ status: 401, description: "Unauthenticated" })
   async updateStatus(
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body("isActive") isActive: boolean,
     @CurrentUser() user: AuthenticatedUser,
   ) {
@@ -136,14 +142,14 @@ export class UserController {
   @ApiResponse({ status: 403, description: "Insufficient permissions" })
   @ApiResponse({ status: 401, description: "Unauthenticated" })
   async assignBranches(
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body("branchIds") branchIds: string[],
     @CurrentUser() user: AuthenticatedUser,
   ) {
     if (
       !Array.isArray(branchIds) ||
       !branchIds.every(
-        (id) => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id),
+        (id) => typeof id === "string" && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id),
       )
     )
       throw new BadRequestException("Filial siyahısı düzgün deyil");
@@ -162,16 +168,13 @@ export class UserController {
   @ApiResponse({ status: 403, description: "Insufficient permissions" })
   @ApiResponse({ status: 401, description: "Unauthenticated" })
   async assignRoles(
-    @Param("id") id: string,
-    @Body("roleIds") roleIds: string[],
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: unknown,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    if (
-      !Array.isArray(roleIds) ||
-      !roleIds.every((id) => typeof id === "string")
-    )
-      throw new BadRequestException("Rol siyahısı düzgün deyil");
-    return this.userService.assignRoles(id, roleIds, user.userId);
+    const parsed = AssignRolesDto.safeParse(body);
+    if (!parsed.success) throw new BadRequestException("Ən azı bir düzgün rol və filial seçin.");
+    return this.userService.assignRoles(id, parsed.data.roleIds, user.userId, parsed.data.branchId);
   }
 
   @UseGuards(AuthGuard("jwt"), RolesGuard, BranchGuard)
@@ -182,7 +185,7 @@ export class UserController {
   @ApiResponse({ status: 403, description: "Insufficient permissions" })
   @ApiResponse({ status: 401, description: "Unauthenticated" })
   async resetPassword(
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: unknown,
     @CurrentUser() user: AuthenticatedUser,
   ) {

@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException, ForbiddenException } from "@nestjs/c
 import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../prisma/prisma.service";
 import * as argon2 from "argon2";
+import { effectiveAssignments } from "./authorization";
 
 @Injectable()
 export class AuthService {
@@ -12,7 +13,7 @@ export class AuthService {
 
   async validateUser(email: string, password: string): Promise<any> {
     const user = await this.prisma.user.findFirst({
-      where: { email },
+      where: { email: { equals: email.trim(), mode: "insensitive" } },
       include: {
         userBranchRoles: {
           include: { role: true, branch: true },
@@ -28,6 +29,9 @@ export class AuthService {
     if (!isPasswordValid) {
       throw new UnauthorizedException("Düzgün şifrə deyil");
     }
+
+    if (!effectiveAssignments(user.userBranchRoles).length)
+      throw new UnauthorizedException("Hesaba aktiv filial üzrə rol təyin edilməyib.");
 
     return user;
   }
@@ -98,10 +102,11 @@ export class AuthService {
     }
 
     // Build permission matrix
+    const assignments = effectiveAssignments(user.userBranchRoles);
     const permissions = {
-      roles: user.userBranchRoles.map(ubr => ubr.role.name),
-      branches: user.userBranchRoles.map(ubr => ubr.branch.id),
-      isSuperAdmin: user.userBranchRoles.some(ubr => ubr.role.name === 'SUPER_ADMIN'),
+      roles: [...new Set(assignments.map(ubr => ubr.role.name))],
+      branches: [...new Set(assignments.filter(ubr => ubr.branch.isActive).map(ubr => ubr.branch.id))],
+      isSuperAdmin: assignments.some(ubr => ubr.role.name === 'SUPER_ADMIN'),
     };
 
     return permissions;

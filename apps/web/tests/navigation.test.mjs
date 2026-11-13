@@ -22,3 +22,11 @@ test("OMR operator sees scanning and results, not sales", () => {
 test("central admin sees everything", () => {
   assert.equal(hrefs(["CENTRAL_ADMIN"]).length, visibleNavigation(["SUPER_ADMIN"]).length);
 });
+
+test("branch managers can read staff but cannot enter central administration", () => {
+  const manager = hrefs(["BRANCH_MANAGER"]);
+  for (const href of ["/dashboard/users", "/dashboard/omr", "/dashboard/tickets"])
+    assert.ok(manager.includes(href), href);
+  for (const href of ["/dashboard/branches", "/dashboard/questions", "/dashboard/results", "/dashboard/settings"])
+    assert.ok(!manager.includes(href), href);
+});

@@ -27,7 +27,7 @@ OP = OMR_OPERATOR. "Own branch" scoping is enforced server-side.
 | `POST /auth/login`, `GET /auth/me` | public / any | |
 | `GET /health` | public | DB connectivity |
 | `GET/POST/PATCH /branches` | read: staff; write: SA, CA | |
-| `GET/POST/PATCH /users…` | SA, CA | roles, branches, status, password reset |
+| `GET/POST/PATCH /users…` | read list: SA, CA, BM; mutations/details: SA, CA | BM sees only managed-branch assignments; roles, branches, status, password reset |
 | `GET/POST/PATCH /exams…`, `PATCH /exams/:id/publish` | write: SA, CA | price must be set to publish |
 | `GET/POST/PATCH /exam-sessions…` | write: SA, CA | lifecycle PLANNED→OPEN→CLOSED/CANCELLED |
 | `GET/PATCH /candidates…` | SA, CA, BM | |
@@ -53,6 +53,17 @@ OP = OMR_OPERATOR. "Own branch" scoping is enforced server-side.
 | `POST /results/exams/:examId/publish` / `unpublish` | SA, CA | publish needs empty review queue |
 | `POST /public/results/lookup` `{ticket, candidateNumber}` | public | published only; identical 404 for every failure |
 | `GET /public/exams`, `POST /public/orders`, `GET /public/orders/:token` | public | online order with idempotency key |
+
+## User role assignment
+
+`PATCH /users/:id/roles` accepts `{roleIds: ["SELLER"], branchId?: "uuid"}`.
+An individual branch update preserves other branches. Omitting `branchId`
+replaces roles across all currently assigned branches. Empty/unknown roles and
+inactive branches are rejected. Changed permissions invalidate previous tokens.
+
+User list filters: `branchId` (alias `branch`), `roleId` or role name (alias `role`),
+`status=active|inactive`, `search`, integer `page` and `limit` (1–100).
+See [access control](ACCESS_CONTROL.md) for the complete role matrix.
 
 ## Ticket QR format
 

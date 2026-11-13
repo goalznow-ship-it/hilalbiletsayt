@@ -22,7 +22,7 @@ export type NavGroup = "manage" | "exam" | "system";
 export const navigation = [
   { href: "/dashboard", label: "İdarə paneli", icon: LayoutDashboard, group: "manage" as NavGroup },
   { href: "/dashboard/branches", label: "Filiallar", icon: Building2, group: "manage" as NavGroup, roles: CENTRAL },
-  { href: "/dashboard/users", label: "İşçilər və satıcılar", icon: UsersRound, group: "manage" as NavGroup, roles: CENTRAL },
+  { href: "/dashboard/users", label: "İstifadəçilər və rollar", icon: UsersRound, group: "manage" as NavGroup, roles: [...CENTRAL, "BRANCH_MANAGER"] },
   { href: "/dashboard/exams", label: "İmtahanlar", icon: GraduationCap, group: "exam" as NavGroup, roles: [...CENTRAL, "BRANCH_MANAGER"] },
   { href: "/dashboard/questions", label: "Sual bankı", icon: FileText, group: "exam" as NavGroup, roles: CENTRAL },
   { href: "/examinations", label: "Bilet kassası", icon: Ticket, group: "exam" as NavGroup, roles: SALES },
@@ -45,4 +45,12 @@ export const roleLabels: Record<string, string> = {
   BRANCH_MANAGER: "Filial rəhbəri",
   SELLER: "Satıcı",
   OMR_OPERATOR: "OMR operatoru",
+};
+
+export const roleDescriptions: Record<string, string> = {
+  SUPER_ADMIN: "Bütün filiallar və sistem bölmələri. Son aktiv super administratorun hesabı qorunur.",
+  CENTRAL_ADMIN: "Bütün filiallar, istifadəçilər, imtahanlar, satış və nəticələrin dərci.",
+  BRANCH_MANAGER: "Təyin olunan filiallarda namizədlər, satış, hesabat, günün bağlanması və OMR. İşçi siyahısına baxış.",
+  SELLER: "Təyin olunan filiallarda bilet satışı, ödəniş və giriş yoxlaması. Öz satdığı bileti ləğv edə bilər.",
+  OMR_OPERATOR: "Təyin olunan filiallarda cavab kartları və skanlar. Öz yükləmələrinin yoxlanması; nəticələri dərc edə bilməz.",
 };

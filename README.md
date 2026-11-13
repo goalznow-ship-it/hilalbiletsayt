@@ -102,7 +102,7 @@ The API process additionally understands `DATABASE_URL`, `CORS_ORIGIN`,
 
 | Capability | SUPER_ADMIN / CENTRAL_ADMIN | BRANCH_MANAGER | SELLER | OMR_OPERATOR | Public |
 | --- | --- | --- | --- | --- | --- |
-| Branches, users, exams, question bank | all | view exams | — | — | — |
+| Branches, users, exams, question bank | all | view exams and own-branch staff | — | — | — |
 | Sell tickets, register buyer, take cash | any branch | own branch | own branch | — | online order |
 | See tickets and sales reports | all branches | own branch | own branch | — | own receipt |
 | Cancel a ticket | any | — | tickets they sold | — | — |

@@ -3,6 +3,7 @@ import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
+import { effectiveAssignments } from "./authorization";
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -33,7 +34,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException("Sessiya bitib. Yenidən daxil olun");
     }
 
-    const roles = [...new Set(user.userBranchRoles.map((entry) => entry.role.name))];
+    const assignments = effectiveAssignments(user.userBranchRoles);
+    const roles = [...new Set(assignments.map((entry) => entry.role.name))];
+    if (!roles.length) throw new UnauthorizedException("Hesaba aktiv filial üzrə rol təyin edilməyib.");
 
     return {
       userId: user.id,
@@ -41,8 +44,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       fullName: user.fullName,
       role: roles[0],
       roles,
-      branches: user.userBranchRoles.map((entry) => entry.branch),
-      userBranchRoles: user.userBranchRoles.map((entry) => ({
+      branches: [...new Map(assignments.filter(entry => entry.branch.isActive).map(entry => [entry.branchId, entry.branch])).values()],
+      userBranchRoles: assignments.map((entry) => ({
         branchId: entry.branchId,
         role: entry.role.name,
       })),

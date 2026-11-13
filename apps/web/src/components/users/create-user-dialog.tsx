@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useSession } from "@/components/session-provider";
 import { Input } from "@/components/ui/input";
+import { roleLabels, roleDescriptions } from "@/lib/navigation";
 
 type Branch = { id: string; name: string };
 type RoleOption = "SUPER_ADMIN" | "CENTRAL_ADMIN" | "BRANCH_MANAGER" | "SELLER" | "OMR_OPERATOR";
@@ -30,7 +31,7 @@ export function CreateUserDialog({
     email: "",
     fullName: "",
     password: "",
-    role: "",
+    role: "SELLER",
     branchIds: [],
     isActive: true,
   });
@@ -73,6 +74,7 @@ export function CreateUserDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setError("");
     setLoading(true);
 
@@ -81,8 +83,8 @@ export function CreateUserDialog({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: form.email,
-          fullName: form.fullName,
+          email: form.email.trim(),
+          fullName: form.fullName.trim(),
           password: form.password,
           role: form.role || undefined,
           branchIds: form.branchIds,
@@ -130,7 +132,9 @@ export function CreateUserDialog({
         <Input
           name="fullName"
           aria-label="Tam ad"
-          placeholder="Tam Adı"
+          placeholder="Tam adı"
+          minLength={2}
+          maxLength={200}
           value={form.fullName}
           onChange={handleChange}
           required
@@ -150,6 +154,7 @@ export function CreateUserDialog({
         <select
           name="role"
           aria-label="Rol"
+          required
           value={form.role}
           onChange={handleChange}
           className="mt-1 block w-full rounded border-input"
@@ -157,10 +162,12 @@ export function CreateUserDialog({
           <option value="">Rol seçin</option>
           {roles.map((role) => (
             <option key={role} value={role}>
-              {role}
+              {roleLabels[role]}
             </option>
           ))}
         </select>
+
+        {form.role && <p className="text-sm text-muted-foreground">{roleDescriptions[form.role]}</p>}
 
         <select
           multiple
