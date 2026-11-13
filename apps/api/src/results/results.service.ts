@@ -9,6 +9,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { AuthenticatedUser, getBranchIdsForRoles, isCentralAdmin } from "../auth/authorization";
 import { verifySignedTicketToken } from "../common/qr-signature";
+import type { KeyAnswer, Rules } from "../omr/omr.contract";
 
 type ExamResultRow = {
   id: string;
@@ -139,7 +140,8 @@ export class ResultsService {
   private readonly lookupInclude = {
     candidate: { select: { candidate_number: true, full_name: true } },
     exam: { select: { code: true, title: true, resultsPublishedAt: true } },
-    omrSheet: { select: { result: { select: { status: true, data: true } } } },
+    omrSheet: { select: { result: { select: { status: true, data: true } },
+      answerKey: { select: { answers: true, variant: true, scoring: true } } } },
   } as const;
 
   /** Public, rate-limited result lookup: ticket + candidate number, published only. */
@@ -156,8 +158,21 @@ export class ResultsService {
         typeof data.maximumScore !== "number")
       throw new NotFoundException(NOT_AVAILABLE);
 
-    const outcomes = Array.isArray(data.outcomes) ? (data.outcomes as Array<{ outcome?: string }>) : [];
+    const outcomes = Array.isArray(data.outcomes)
+      ? (data.outcomes as Array<{ question: number; outcome: string; points: number | null }>) : [];
     const count = (name: string) => outcomes.filter((item) => item?.outcome === name).length;
+    const key = ticket.omrSheet!.answerKey;
+    const keyAnswers = Array.isArray(key.answers) ? key.answers as KeyAnswer[] : [];
+    const recognized = Array.isArray(data.answers)
+      ? data.answers as Array<{ question: number; selected: string | null; marked: string[] }> : [];
+    // Whitelist candidate-visible fields; never return identities, source pixels or review notes.
+    const answers = recognized.flatMap(answer => {
+      const correct = keyAnswers[answer.question - 1]?.correct;
+      const outcome = outcomes.find(item => item.question === answer.question);
+      return correct && outcome ? [{ question: answer.question, selected: answer.selected,
+        marked: answer.marked, correct, outcome: outcome.outcome, points: outcome.points }] : [];
+    });
+    const rules = key.scoring as Rules;
     // Competition rank uses score percentage so keys with different maxima remain comparable.
     const [ranking] = await this.prisma.$queryRaw<Array<{ rank: number; participants: number }>>`
       WITH scores AS (
@@ -183,6 +198,9 @@ export class ResultsService {
       rank: ranking.rank,
       participants: ranking.participants,
       publishedAt: ticket.exam.resultsPublishedAt,
+      variant: key.variant,
+      answers,
+      scoring: { wrong: rules.wrong, unanswered: rules.unanswered, multiple: rules.multiple, floorAtZero: rules.floorAtZero },
     };
   }
 }

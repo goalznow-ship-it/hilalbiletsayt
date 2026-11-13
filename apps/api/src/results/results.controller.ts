@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Header, HttpCode, Param, ParseUUIDPipe, Post, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { Roles, RolesGuard } from "../auth/guards/roles.guard";
@@ -45,6 +45,7 @@ export class PublicResultsController {
 
   @Post("lookup")
   @HttpCode(200)
+  @Header("Cache-Control", "no-store")
   @UseGuards(PublicRateGuard)
   @ApiOperation({ summary: "Candidate result lookup (ticket + candidate number, published only)" })
   @ApiResponse({ status: 404, description: "Uniform response for any mismatch" })

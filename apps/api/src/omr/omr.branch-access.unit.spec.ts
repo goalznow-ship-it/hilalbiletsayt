@@ -43,6 +43,30 @@ describe("OMR branch access (regression)", () => {
     const { service } = setup([null]);
     await expect(service.getUpload("upload", operator("owner", "A"))).rejects.toThrow();
   });
+  it("returns only processing status to the uploader when QR identity is unverified", async () => {
+    const { service } = setup([null]);
+    const summary = await service.getUpload("upload", operator("owner", "A"), true);
+    expect(summary).toMatchObject({ id: "upload", pages: [], detailsRestricted: true });
+    expect(summary).not.toHaveProperty("createdBy");
+    await expect(service.getUpload("upload", operator("other", "A"), true)).rejects.toThrow();
+    await expect(service.original("upload", operator("owner", "A"))).rejects.toThrow();
+  });
+  it("keeps failed uploads retryable without exposing an unverified original", async () => {
+    const { service, findUnique } = setup([]);
+    findUnique.mockResolvedValue({ id: "upload", createdBy: "owner", pages: [], status: "FAILED",
+      error: "PROCESSING_FAILED_RETRY_ALLOWED", mime: "image/jpeg" } as never);
+    await expect(service.getUpload("upload", operator("owner", "A"), true))
+      .resolves.toMatchObject({ status: "FAILED", error: "PROCESSING_FAILED_RETRY_ALLOWED", pages: [], detailsRestricted: true });
+    await expect(service.original("upload", operator("owner", "A"))).rejects.toThrow();
+  });
+  it("distinguishes a duplicate from an unreadable QR without disclosing the original result", async () => {
+    const { service, findUnique } = setup([null]);
+    findUnique.mockResolvedValue({ id: "upload", createdBy: "owner", status: "REVIEW", pages: [
+      { sheet: null, status: "DUPLICATE", data: { duplicateOf: "private-result" } },
+    ] } as never);
+    await expect(service.getUpload("upload", operator("owner", "A"), true))
+      .resolves.toMatchObject({ reviewReason: "SHEET_ALREADY_PROCESSED", pages: [], detailsRestricted: true });
+  });
   it("still allows central admin to inspect unbound scans", async () => {
     const { service } = setup([null]);
     await expect(service.getUpload("upload", { userId: "admin", roles: ["SUPER_ADMIN"] }))

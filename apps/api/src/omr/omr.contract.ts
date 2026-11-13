@@ -7,10 +7,16 @@ export const scoringSchema = z.object({
 }).strict();
 export const keySchema = z.object({
   examId: z.uuid(), variant: z.string().regex(/^[A-Z0-9_-]{1,16}$/),
-  questionIds: z.array(z.uuid()).min(1).max(150).refine(ids => new Set(ids).size === ids.length),
+  questionIds: z.array(z.uuid()).min(1).max(150).refine(ids => new Set(ids).size === ids.length).optional(),
+  answers: z.array(z.object({
+    correct: z.enum(["A", "B", "C", "D", "E"]), points: z.number().int().min(1).max(1000),
+  }).strict()).min(1).max(150).optional(),
   choiceCount: z.number().int().min(2).max(5), scoring: scoringSchema,
   templateVersionId: z.uuid().optional(),
-}).strict();
+}).strict().refine(data => Boolean(data.questionIds) !== Boolean(data.answers),
+  "Choose either bank questions or direct answers.")
+  .refine(data => !data.answers?.some(answer => "ABCDE".indexOf(answer.correct) >= data.choiceCount),
+    "Answer outside the selected choice count.");
 export const issueSchema = z.object({ ticketId: z.uuid(), answerKeyId: z.uuid() }).strict();
 export const answerSchema = z.object({
   question: z.number().int().min(1).max(150), state: z.enum(["MARKED", "BLANK", "MULTIPLE", "UNCERTAIN"]),
@@ -38,7 +44,7 @@ export const reviewSchema = z.object({
   changes: z.array(z.object({
     question: z.number().int().min(1).max(150),
     selected: z.enum(["A", "B", "C", "D", "E"]).nullable(),
-  }).strict()).min(1).max(150).refine(items =>
+  }).strict()).max(150).refine(items =>
     new Set(items.map(item => item.question)).size === items.length),
 }).strict();
 
@@ -55,7 +61,7 @@ export const workerResultSchema = z.object({ files: z.array(z.object({
   error: z.string().max(100).optional(),
 })).length(1) });
 export type ReadPage = z.infer<typeof pageSchema>;
-export type KeyAnswer = { questionId: string; correct: string; points: number };
+export type KeyAnswer = { questionId: string | null; correct: string; points: number };
 export type Rules = z.infer<typeof scoringSchema>;
 
 export function scorePage(page: ReadPage, key: KeyAnswer[], rules: Rules, choices: number) {

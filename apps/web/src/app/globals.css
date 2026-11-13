@@ -2167,7 +2167,226 @@ input[type="checkbox"] {
   vertical-align: top;
 }
 .public-result {
-  max-width: 560px;
+  max-width: 720px;
   margin: 0 auto;
-  padding: 32px 16px;
+  padding: 32px 16px 56px;
+}
+.result-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 20px;
+  margin-bottom: 32px;
+  border-bottom: 1px solid var(--border);
+}
+.result-brand nav {
+  display: flex;
+  gap: 18px;
+  font-size: 14px;
+}
+.result-brand a:hover {
+  text-decoration: underline;
+}
+.result-eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--primary);
+}
+.public-result h1 {
+  margin: 8px 0 12px;
+  font-size: clamp(28px, 6vw, 40px);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  color: var(--primary);
+}
+.result-lead {
+  max-width: 600px;
+  color: var(--muted-foreground);
+  line-height: 1.7;
+}
+.result-form-card {
+  margin-top: 24px;
+}
+.result-privacy {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  line-height: 1.6;
+}
+.result-error {
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--destructive);
+  color: var(--destructive);
+  background: color-mix(in oklch, var(--destructive) 8%, white);
+}
+.result-card {
+  border-width: 2px;
+  border-color: color-mix(in oklch, var(--primary) 25%, white);
+}
+.result-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.result-heading h2 {
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+.result-exam-code {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+  letter-spacing: 0.06em;
+}
+.result-name {
+  margin-top: 4px;
+  color: var(--muted-foreground);
+}
+.result-published {
+  font-size: 13px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+.result-score-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 24px 0 20px;
+  padding: 18px 20px;
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--primary) 6%, white);
+}
+.result-score {
+  font-size: clamp(38px, 9vw, 52px);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+.result-score span {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+.result-percent {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+.result-percent span {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  letter-spacing: 0.02em;
+}
+.result-rank-note {
+  margin-top: 16px;
+  font-size: 14px;
+  color: var(--muted-foreground);
+}
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.result-help {
+  margin-top: 40px;
+}
+.result-help h2 {
+  font-size: 22px;
+  font-weight: 650;
+  margin-bottom: 12px;
+}
+.result-help p {
+  color: var(--muted-foreground);
+  line-height: 1.75;
+  max-width: 620px;
+}
+.result-terms {
+  display: grid;
+  gap: 0;
+}
+.result-terms > div {
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+.result-terms dt {
+  font-weight: 600;
+}
+.result-terms dd {
+  margin-top: 4px;
+  color: var(--muted-foreground);
+  line-height: 1.7;
+  font-size: 14px;
+}
+.result-footer {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--muted-foreground);
+  line-height: 1.7;
+}
+@media print {
+  .result-brand nav,
+  .result-form-card,
+  .result-help,
+  .no-print {
+    display: none;
+  }
+  .public-result {
+    max-width: none;
+    padding: 0;
+  }
+  .result-card {
+    box-shadow: none;
+    border: 1px solid #bbb;
+  }
+}
+
+/* OMR controls share the burgundy tokens; filtered answers remain available when printed. */
+.omr-workspace :is(button, select, input:not([type="checkbox"]):not([type="radio"]), summary) {
+  min-height: 44px;
+}
+.omr-workspace :is(button, a, select, input, textarea, summary):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+.omr-workspace :is(input, select, textarea) { max-width: 100%; }
+.omr-mode { border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; font-size: 14px; }
+.omr-mode[aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+.omr-answer-choice { position: relative; display: block; cursor: pointer; }
+.omr-answer-choice input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.omr-answer-choice span { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--border); border-radius: 50%; font-weight: 600; background: var(--background); }
+.omr-answer-choice input:checked + span { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+.omr-answer-choice input:focus-visible + span { outline: 2px solid var(--primary); outline-offset: 3px; }
+.result-answer-list { margin-top: 16px; display: grid; column-gap: 28px; }
+.result-answer { padding: 18px 0; border-bottom: 1px solid var(--border); break-inside: avoid; font-size: 14px; }
+.result-answer[data-filtered="true"] { display: none; }
+@media (min-width: 640px) {
+  .result-answer-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .omr-answer-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; }
+}
+@media print {
+  .result-answer[data-filtered="true"] { display: block; }
+  .result-answer-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 639px) {
+  .omr-review-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .omr-review-table tbody { display: block; }
+  .omr-review-table tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 10px 0; }
+  .omr-review-table td { display: block; min-width: 0; }
+  .omr-review-table td::before { content: attr(data-label); display: block; margin-bottom: 4px; color: var(--muted-foreground); font-size: 12px; font-weight: 400; }
 }

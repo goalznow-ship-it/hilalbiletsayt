@@ -10,27 +10,27 @@ export default function OmrPage() {
 
   const links = [
     { href: "/dashboard/omr/upload", name: "Skan yüklə",
-      desc: "Cavab vərəqinin PDF faylını yüklə." },
+      desc: "Telefon kamerası ilə çək və ya PDF/JPEG/PNG yüklə." },
     { href: "/dashboard/omr/sheets", name: "Cavab vərəqi yarat",
       desc: "Bilet və cavab açarı ilə PDF hazırla." },
     { href: "/dashboard/omr/keys", name: "Cavab açarları",
       desc: "Suallar, düzgün cavablar və bal qaydaları." },
     { href: "/dashboard/omr/results", name: "Skan nəticələri",
       desc: "Manual yoxlama və CSV/Excel ixracı." },
-    { href: "/dashboard/exams", name: "İmtahanlar",
-      desc: "Mövcud imtahanlara bax." },
+    { href: "/dashboard/results", name: "Nəticələri açıqlamaq",
+      desc: "Hazır nəticələri dərc et və namizədlərlə paylaş." },
   ];
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
+    <main className="omr-workspace mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
       <header>
         <h1 className="text-2xl font-bold">OMR idarəetməsi</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Cavab vərəqlərinin hazırlanması və skanların izlənməsi.
+          Cavab açarını hazırlayın, vərəqləri çap edin, telefonla skan edib nəticələri açıqlayın.
         </p>
       </header>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         {links.map((item) => (
           <Link key={item.href} href={item.href}
             className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-[#7A0014]">

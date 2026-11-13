@@ -250,6 +250,7 @@ model OmrAnswerKey {
   version     Int
   choiceCount Int
   /// Ordered, immutable snapshots of existing Question IDs, correct choices and points.
+  /// Direct answer keys have null questionId and retain the same immutable scoring contract.
   answers     Json
   scoring     Json
   digest      String

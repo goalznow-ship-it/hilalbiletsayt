@@ -67,9 +67,14 @@ export class OmrService {
       throw new BadRequestException("Bu versiyada ayrıca şablon ID-si dəstəklənmir; hilal-a4-v1 istifadə olunur.");
     return this.prisma.$transaction(async tx => {
       await tx.$queryRawUnsafe("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))::text", `omr-key:${data.examId}:${data.variant}`);
-      const questions = await tx.question.findMany({ where: { id: { in: data.questionIds }, examId: data.examId, isActive: true } });
-      if (questions.length !== data.questionIds.length) throw new BadRequestException("Suallar seçilmiş imtahana aid deyil və ya aktiv deyil.");
-      const answers: KeyAnswer[] = data.questionIds.map(id => {
+      if (!await tx.exam.findUnique({ where: { id: data.examId }, select: { id: true } }))
+        throw new NotFoundException("İmtahan tapılmadı.");
+      const ids = data.questionIds ?? [];
+      const questions = ids.length ? await tx.question.findMany({ where: { id: { in: ids }, examId: data.examId, isActive: true } }) : [];
+      if (questions.length !== ids.length) throw new BadRequestException("Suallar seçilmiş imtahana aid deyil və ya aktiv deyil.");
+      const answers: KeyAnswer[] = data.answers
+        ? data.answers.map(answer => ({ questionId: null, ...answer }))
+        : ids.map(id => {
         const q = questions.find(q => q.id === id)!;
         if (q.correct < 1 || q.correct > data.choiceCount || q.variants.split("|").length !== data.choiceCount || q.points < 1 || q.points > 1000)
           throw new BadRequestException("Sualın variantları, düzgün cavabı və ya balı uyğun deyil.");
@@ -123,7 +128,7 @@ export class OmrService {
     return Buffer.from(await response.arrayBuffer());
   }
 
-  async getUpload(id: string, user: AuthenticatedUser) {
+  async getUpload(id: string, user: AuthenticatedUser, statusOnlyIfRestricted = false) {
     const upload = await this.prisma.omrUpload.findUnique({
       where: { id },
       include: { pages: {
@@ -137,7 +142,16 @@ export class OmrService {
       // Fail closed if a scan is not attributable to an authorized branch.
       if (upload.pages.length === 0 || upload.pages.some(page =>
         !page.sheet || !this.branchAllowed(user, page.sheet.branchId)
-      )) throw new ForbiddenException("Bu yükləmənin filialına icazəniz yoxdur.");
+      )) {
+        // The submitting user needs retry/review status, never unverified images or answers.
+        if (statusOnlyIfRestricted) return {
+          id: upload.id, status: upload.status, error: upload.error, mime: upload.mime,
+          pages: [], detailsRestricted: true,
+          reviewReason: upload.pages.length > 0 && upload.pages.every(page => page.status === "DUPLICATE")
+            ? "SHEET_ALREADY_PROCESSED" : "BRANCH_IDENTITY_UNVERIFIED",
+        };
+        throw new ForbiddenException("Bu yükləmənin filialına icazəniz yoxdur.");
+      }
     }
     // Do not change the existing response shape by returning sheet metadata.
     return { ...upload, pages: upload.pages.map(({ sheet, ...page }) => page) };
@@ -159,6 +173,7 @@ export class OmrService {
       id: key.id, examId: key.examId, variant: key.variant,
       version: key.version, choiceCount: key.choiceCount, createdAt: key.createdAt,
       questionCount: Array.isArray(key.answers) ? key.answers.length : 0,
+      ...(isCentralAdmin(user) ? { answers: key.answers } : {}),
     }));
   }
 
@@ -341,7 +356,7 @@ export class OmrService {
       const previous = await tx.omrUpload.findUnique({ where: { examId_createdBy_sha256: { examId, createdBy: user.userId, sha256 } } });
       if (previous) return previous;
       const recent = await tx.omrUpload.count({ where: { createdBy: user.userId, createdAt: { gte: new Date(Date.now() - 3600_000) } } });
-      if (recent >= 20) throw new HttpException("OMR saatlıq yükləmə limiti dolub.", 429);
+      if (recent >= 240) throw new HttpException("Saatda 240 skan limiti dolub. Bir qədər sonra davam edin.", 429);
       const total = await tx.omrUpload.aggregate({ _sum: { size: true } });
       const maxBytes = Number(process.env.OMR_MAX_STORAGE_BYTES ?? 2 * 1024 ** 3);
       if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || (total._sum.size ?? 0) + file.size > maxBytes)
@@ -354,7 +369,7 @@ export class OmrService {
     const claim = await this.prisma.omrUpload.updateMany({ where: { id: upload.id, OR: [
       { status: { in: ["PENDING", "FAILED"] } }, { status: "PROCESSING", updatedAt: { lt: new Date(Date.now() - 300_000) } },
     ] }, data: { status: "PROCESSING", attemptId, error: null } });
-    if (!claim.count) return this.getUpload(upload.id, user);
+    if (!claim.count) return this.getUpload(upload.id, user, true);
     try {
       const dir = this.storage();
       await mkdir(dir, { recursive: true, mode: 0o700 });
@@ -390,7 +405,7 @@ export class OmrService {
       await this.prisma.omrUpload.updateMany({ where: { id: upload.id, attemptId, status: "PROCESSING" },
         data: { status: "FAILED", error: "PROCESSING_FAILED_RETRY_ALLOWED" } });
     }
-    return this.getUpload(upload.id, user);
+    return this.getUpload(upload.id, user, true);
   }
 
   private async bindPage(tx: Prisma.TransactionClient, page: ReadPage, examId: string, user: AuthenticatedUser) {

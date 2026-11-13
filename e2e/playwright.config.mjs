@@ -21,6 +21,6 @@ export default defineConfig({
   },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"] } },
-    { name: "mobile", use: { ...devices["Pixel 7"] }, testMatch: /a11y\.spec\.mjs/ },
+    { name: "mobile", use: { ...devices["Pixel 7"] }, testMatch: /(?:a11y|omr-camera)\.spec\.mjs/ },
   ],
 });

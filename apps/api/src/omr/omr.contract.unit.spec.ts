@@ -36,6 +36,17 @@ describe("OMR authoritative scoring", () => {
     expect(keySchema.safeParse({ examId: crypto.randomUUID(), variant: "A", choiceCount: 3,
       scoring: {}, questionIds: ["bad", "bad"] }).success).toBe(false);
   });
+  it("accepts direct answer keys and refuses ambiguous or invalid choices", () => {
+    const input = { examId: crypto.randomUUID(), variant: "A", choiceCount: 4, scoring: {},
+      answers: [{ correct: "A", points: 1 }, { correct: "D", points: 2 }] };
+    expect(keySchema.safeParse(input).success).toBe(true);
+    for (const answers of [[], [{ correct: "E", points: 1 }], [{ correct: "A", points: 0 }],
+      [{ correct: "A", points: 1.5 }], Array(151).fill({ correct: "A", points: 1 })]) {
+      expect(keySchema.safeParse({ ...input, answers }).success).toBe(false);
+    }
+    expect(keySchema.safeParse({ ...input, questionIds: [crypto.randomUUID()] }).success).toBe(false);
+    expect(keySchema.safeParse({ ...input, answers: undefined }).success).toBe(false);
+  });
   it("scores a reliable blank sheet using the configured unanswered penalty", () => {
     const blank = structuredClone(page);
     blank.answers = page.answers.map(a => ({ ...a, state: "BLANK", selected: null, marked: [], fillRatios: [0,0,0] }));

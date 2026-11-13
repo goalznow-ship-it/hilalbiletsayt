@@ -123,6 +123,7 @@ export default function HomePage() {
         </Link>
         <nav aria-label="Əsas menyu">
           <a href="#exams">İmtahanlar</a>
+          <Link href="/results">Nəticələr</Link>
           <Link href="/tickets/verify">Biletimi yoxla</Link>
           <Link href="/login">İdarəetmə paneli</Link>
         </nav>

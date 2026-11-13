@@ -60,3 +60,12 @@ Last updated: 2026-10-23.
 - Reuse Button, Input, Card and official logo. Sales form uses explicit labels and focuses its heading when selected.
 - Receipt uses a separate private capability token; QR verification shows masked identity only. A4 printing hides navigation and instructions outside the ticket.
 - Manual cash payment stays pending until an authorized cashier confirms it.
+
+## OMR and result publication — 2026-11-12
+
+- Retain the existing burgundy palette, system type stack and installed components.
+- Answer keys use 44 px A–E radio targets, a completion count and explicit per-question points.
+- Scanning requires an exam selection, gives framing guidance and offers one-tap access to the next card.
+- Publication uses responsive exam summaries with readiness reasons and direct links to the matching scans.
+- Candidate results show per-question comparisons with text statuses, mistake filtering and a complete print view.
+- Review tables become labeled rows on phones; authorized scan images can be inspected inline.

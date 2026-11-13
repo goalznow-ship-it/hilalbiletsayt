@@ -69,13 +69,13 @@ test.describe.serial("Hilal business flow", () => {
     await uiLogin(page, world.users.OMR_OPERATOR);
     await page.goto("/dashboard/omr/upload");
     await page.getByLabel("İmtahan").selectOption(world.exam.id);
-    await page.getByLabel("PDF cavab vərəqi").setInputFiles({ name: "sheet.pdf", mimeType: "application/pdf", buffer });
+    await page.getByLabel("Cavab vərəqi (PDF, JPEG, PNG)").setInputFiles({ name: "sheet.pdf", mimeType: "application/pdf", buffer });
     await page.locator("form button[type=submit]").click();
     const link = page.locator("a[href*='/dashboard/omr/uploads/']").first();
     await expect(link).toBeVisible({ timeout: 60_000 });
     uploadId = (await link.getAttribute("href")).split("/").pop();
     await link.click();
-    await expect(page.getByText(/Status: REVIEW/)).toBeVisible();
+    await expect(page.getByText(/Status: Yoxlama gözləyir/)).toBeVisible();
     await expect(page.getByText(/ALL_BLANK/)).toBeVisible();
   });
 
@@ -127,7 +127,7 @@ test.describe.serial("Hilal business flow", () => {
     await page.getByLabel("Bilet kodu və ya QR keçidi").fill(ticket.code);
     await page.getByLabel("Namizəd nömrəsi").fill(ticket.candidateNumber);
     await page.getByRole("button", { name: "Nəticəni göstər" }).click();
-    await expect(page.getByText("Düzgün")).toBeVisible();
+    await expect(page.getByText("Düzgün", { exact: true })).toBeVisible();
     await expect(page.locator(".public-result")).toContainText("2 / 3");
   });
 });
