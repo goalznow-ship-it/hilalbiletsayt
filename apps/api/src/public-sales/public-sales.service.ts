@@ -56,7 +56,7 @@ export class PublicSalesService {
       }),
       this.prisma.branch.findMany({
         where: { isActive: true },
-        select: { id: true, name: true, address: true },
+        select: { id: true, name: true, code: true, address: true, phone: true },
         orderBy: { name: "asc" },
       }),
     ]);
@@ -65,11 +65,8 @@ export class PublicSalesService {
         .map((exam) => ({
           ...exam,
           sessions: exam.sessions
-            .map(({ _count, ...session }) => ({
-              ...session,
-              remaining: Math.max(0, session.capacity - _count.tickets),
-            }))
-            .filter((session) => session.remaining > 0),
+            .filter(session => session.capacity > session._count.tickets)
+            .map(({ _count, capacity: _capacity, ...session }) => session),
         }))
         .filter((exam) => exam.sessions.length > 0),
       branches,
@@ -202,6 +199,7 @@ export class PublicSalesService {
       where: { receiptToken: token },
       select: {
         code: true,
+        workNumber: true,
         price: true,
         status: true,
         paymentStatus: true,
@@ -215,7 +213,7 @@ export class PublicSalesService {
             venue: true,
           },
         },
-        branch: { select: { name: true, address: true, phone: true } },
+        branch: { select: { name: true, code: true, address: true, phone: true } },
         candidate: { select: { full_name: true, candidate_number: true } },
       },
     });

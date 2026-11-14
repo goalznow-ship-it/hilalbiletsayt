@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 from fastapi import APIRouter, File, UploadFile, HTTPException
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
@@ -17,6 +17,14 @@ class SheetRequest(BaseModel):
     variant: str = Field(pattern=r"^[A-Z0-9_-]{1,16}$")
     ticket: str = Field(min_length=1, max_length=100)
     candidate: str = Field(min_length=1, max_length=100)
+    candidateName: str = Field(default="", max_length=100)
+    workNumber: str = Field(default="", pattern=r"^(?:[0-9]{8})?$")
+    templateVersion: Literal["hilal-a4-v1", "hilal-a4-v2"] = "hilal-a4-v1"
+
+
+class ReportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    rows: list[Annotated[list[Annotated[str, Field(max_length=200)] | int | float], Field(min_length=13, max_length=13)]] = Field(min_length=1, max_length=5001)
 
 
 async def execute(operation, args):
@@ -50,3 +58,9 @@ async def process_files(files: Annotated[list[UploadFile], File()]):
     finally:
         for file in files:
             await file.close()
+
+
+@router.post("/report")
+async def generate_results(request: ReportRequest):
+    data = await execute("report", request.rows)
+    return Response(data, media_type="application/pdf", headers={"Cache-Control": "no-store"})

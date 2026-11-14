@@ -3,6 +3,7 @@ from app.main import app
 from app.core.config import settings
 from app.omr.supervisor import run_bounded
 from test_recognition import sheet
+import fitz
 
 
 def test_subprocess_pdf_to_image_to_omr():
@@ -29,3 +30,27 @@ def test_worker_auth_precedes_file_parsing(monkeypatch):
     assert result.json()["files"][0]["pages"][0]["status"] == "READ"
     assert client.post("/api/omr/process", headers={"Authorization": f"Bearer {secret}",
                                                     "Content-Length": "999999999"}, content=b"x").status_code == 413
+
+
+def test_coded_sheet_and_named_report_endpoints(monkeypatch):
+    secret = "test-worker-secret-at-least-32-characters"
+    monkeypatch.setattr(settings, "omr_worker_secret", secret)
+    client = TestClient(app)
+    headers = {"Authorization": f"Bearer {secret}"}
+    result = client.post("/api/omr/sheets", headers=headers, json={
+        "token": "a" * 43, "questionCount": 20, "choiceCount": 5, "templateVersion": "hilal-a4-v2",
+        "exam": "Sınaq", "variant": "A", "ticket": "HK-1", "candidate": "QD1234567890",
+        "candidateName": "Əli Əliyev", "workNumber": "12345678",
+    })
+    assert result.status_code == 200, result.text
+    with fitz.open(stream=result.content, filetype="pdf") as doc:
+        assert "Əli Əliyev" in doc[0].get_text()
+        assert "hilal-a4-v2" in doc[0].get_text()
+    row = ["page", "upload", "ticket", "candidate", "branch", "A", 12, 20, "COMPLETED", "Əli Əliyev", "QD1234567890", "HK-1", "12345678"]
+    result = client.post("/api/omr/report", headers=headers, json={"rows": [row, row]})
+    assert result.status_code == 200, result.text
+    assert result.headers["cache-control"] == "no-store"
+    with fitz.open(stream=result.content, filetype="pdf") as doc:
+        assert "Əli Əliyev" in doc[0].get_text()
+        assert "12345678" in doc[0].get_text()
+    assert client.post("/api/omr/report", headers=headers, json={"rows": [["incomplete"]]}).status_code == 422

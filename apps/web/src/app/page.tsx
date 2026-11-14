@@ -26,6 +26,7 @@ export default function HomePage() {
   const [exam, setExam] = useState<PublicExam | null>(null);
   const [sessionId, setSessionId] = useState("");
   const [branchId, setBranchId] = useState("");
+  const selectedBranch = catalog?.branches.find(branch => branch.id === branchId);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -180,7 +181,6 @@ export default function HomePage() {
                           {session.sessionCode}
                           {session.venue ? ` · ${session.venue}` : ""}
                         </span>
-                        <span>{session.remaining} boş yer</span>
                       </li>
                     ))}
                   </ul>
@@ -228,7 +228,6 @@ export default function HomePage() {
                     {exam.sessions.map((session) => (
                       <option key={session.id} value={session.id}>
                         {sessionDate(session.startsAt)} · {session.sessionCode}{" "}
-                        · {session.remaining} boş yer
                       </option>
                     ))}
                   </select>
@@ -267,6 +266,11 @@ export default function HomePage() {
                       </option>
                     ))}
                   </select>
+                  {selectedBranch && <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm" aria-live="polite">
+                    <p className="font-semibold">{selectedBranch.name} · {selectedBranch.code}</p>
+                    {selectedBranch.address && <p className="mt-2">Ünvan: {selectedBranch.address}</p>}
+                    {selectedBranch.phone && <p className="mt-2">Telefon: <a className="underline" href={`tel:${selectedBranch.phone.replace(/[^+0-9]/g, "")}`}>{selectedBranch.phone}</a></p>}
+                  </div>}
                   <p className="public-notice">
                     Onlayn ödəniş mövcud deyil. Sifarişdən sonra seçdiyiniz
                     filialın kassasına bilet kodunu təqdim edin. Əməkdaş ödənişi

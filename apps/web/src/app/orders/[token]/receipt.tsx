@@ -1,15 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
-import QRCode from "react-qr-code";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { publicRequest, sessionDate } from "@/lib/public-sales";
-import { formatAzn } from "@/lib/money";
+import { ExamTicket } from "@/components/exam-ticket";
+import { publicRequest } from "@/lib/public-sales";
 
 type Ticket = {
   code: string;
+  workNumber: string;
   price: number;
   status: string;
   paymentStatus: string;
@@ -21,7 +19,7 @@ type Ticket = {
     sessionCode: string;
     venue: string | null;
   } | null;
-  branch: { name: string; address: string | null; phone: string | null } | null;
+  branch: { name: string; code: string; address: string | null; phone: string | null } | null;
   candidate: { full_name: string; candidate_number: string } | null;
 };
 export default function Receipt({ token }: { token: string }) {
@@ -62,81 +60,13 @@ export default function Receipt({ token }: { token: string }) {
             Bilet sifarişiniz qeydə alınıb. Bu səhifənin şəxsi keçidini
             saxlayın; həmin keçidlə biletə yenidən baxa bilərsiniz.
           </p>
-          <Card className="print-ticket public-ticket">
-            <div className="flex items-center gap-4">
-              <Image
-                src="/branding/hilal-logo.png"
-                alt="Hilal"
-                width={52}
-                height={52}
-              />
-              <h1>Hilal Bilet</h1>
-            </div>
-            <h2>{ticket.exam.title}</h2>
-            <p>{ticket.exam.code}</p>
-            <dl>
-              <dt>Bilet kodu</dt>
-              <dd>{ticket.code}</dd>
-              <dt>Namizəd</dt>
-              <dd>{ticket.candidate?.full_name}</dd>
-              <dt>Namizəd nömrəsi (nəticələr üçün)</dt>
-              <dd className="break-all">{ticket.candidate?.candidate_number}</dd>
-              <dt>Sessiya</dt>
-              <dd>{ticket.session?.sessionCode}</dd>
-              <dt>Tarix və saat (Bakı)</dt>
-              <dd>
-                {ticket.session ? sessionDate(ticket.session.startsAt) : "—"}
-              </dd>
-              <dt>İmtahan yeri</dt>
-              <dd>{ticket.session?.venue || "Filialla dəqiqləşdirin"}</dd>
-              <dt>Qiymət</dt>
-              <dd>{formatAzn(ticket.price)}</dd>
-              <dt>Bilet statusu</dt>
-              <dd>
-                {(
-                  {
-                    ACTIVE: "Aktiv",
-                    USED: "İstifadə edilib",
-                    CANCELLED: "Ləğv edilib",
-                  } as Record<string, string>
-                )[ticket.status] ?? ticket.status}
-              </dd>
-              <dt>Ödəniş</dt>
-              <dd>
-                {ticket.paymentStatus === "PAID"
-                  ? "Ödənilib"
-                  : ticket.paymentStatus === "REFUNDED"
-                    ? "Geri qaytarılıb"
-                    : "Ödəniş gözlənilir"}
-              </dd>
-              <dt>Ödəniş filialı</dt>
-              <dd>
-                {ticket.branch?.name}
-                <br />
-                {ticket.branch?.address}
-                <br />
-                {ticket.branch?.phone}
-              </dd>
-            </dl>
-            <div className="public-qr">
-              {origin && (
-                <QRCode
-                  value={`${origin}/tickets/verify/${ticket.qrCode}`}
-                  size={164}
-                />
-              )}
-              <Link href={`/tickets/verify/${ticket.qrCode}`}>
-                Biletin həqiqiliyini yoxla
-              </Link>
-            </div>
-            {ticket.paymentStatus === "PENDING" && (
-              <p className="public-notice">
-                Ödəniş təsdiqlənməyib. Bilet kodunu seçdiyiniz filialın
-                kassasına təqdim edib nağd ödəniş edin. Onlayn ödəniş mövcud
-                deyil.
-              </p>
-            )}
-          </Card>
+          <ExamTicket ticket={{ ...ticket,
+            examCode: ticket.exam.code, examTitle: ticket.exam.title,
+            sessionCode: ticket.session?.sessionCode ?? null, sessionStartsAt: ticket.session?.startsAt,
+            sessionVenue: ticket.session?.venue, candidateFullName: ticket.candidate?.full_name ?? null,
+            candidateNumber: ticket.candidate?.candidate_number ?? null, branchName: ticket.branch?.name ?? null,
+            branchCode: ticket.branch?.code, branchAddress: ticket.branch?.address, branchPhone: ticket.branch?.phone,
+          }} verifyUrl={origin ? `${origin}/tickets/verify/${ticket.qrCode}` : ""} />
         </>
       )}
     </main>

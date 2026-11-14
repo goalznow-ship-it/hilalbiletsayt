@@ -17,7 +17,8 @@ export const keySchema = z.object({
   "Choose either bank questions or direct answers.")
   .refine(data => !data.answers?.some(answer => "ABCDE".indexOf(answer.correct) >= data.choiceCount),
     "Answer outside the selected choice count.");
-export const issueSchema = z.object({ ticketId: z.uuid(), answerKeyId: z.uuid() }).strict();
+export const issueSchema = z.object({ ticketId: z.uuid().optional(), workNumber: z.string().regex(/^[0-9]{8}$/).optional(),
+  answerKeyId: z.uuid() }).strict().refine(data => Boolean(data.ticketId) !== Boolean(data.workNumber), "Choose ticket ID or work number.");
 export const answerSchema = z.object({
   question: z.number().int().min(1).max(150), state: z.enum(["MARKED", "BLANK", "MULTIPLE", "UNCERTAIN"]),
   selected: z.enum(["A", "B", "C", "D", "E"]).nullable(),
@@ -49,15 +50,16 @@ export const reviewSchema = z.object({
 }).strict();
 
 export const pageSchema = z.object({
-  pageIndex: z.number().int().min(0).max(9), engineVersion: z.literal("1.0.0"),
-  templateVersion: z.literal("hilal-a4-v1"), sheetToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable(),
+  pageIndex: z.number().int().min(0).max(99), engineVersion: z.literal("1.0.0"),
+  templateVersion: z.enum(["hilal-a4-v1", "hilal-a4-v2"]), sheetToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable(),
+  workNumber: z.string().regex(/^[0-9]{8}$/).nullable().optional(),
   questionCount: z.number().int().min(1).max(150).optional(), choiceCount: z.number().int().min(2).max(5).optional(),
   answers: z.array(answerSchema).max(150), confidence: z.number().min(0).max(1),
   status: z.enum(["READ", "REVIEW"]), reviewFlags: z.array(z.string().max(80)).max(20),
   metadata: z.record(z.string(), z.unknown()),
 });
 export const workerResultSchema = z.object({ files: z.array(z.object({
-  status: z.enum(["READ", "REVIEW", "REJECTED"]), pages: z.array(pageSchema).max(10),
+  status: z.enum(["READ", "REVIEW", "REJECTED"]), pages: z.array(pageSchema).max(100),
   error: z.string().max(100).optional(),
 })).length(1) });
 export type ReadPage = z.infer<typeof pageSchema>;

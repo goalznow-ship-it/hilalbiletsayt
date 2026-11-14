@@ -12,7 +12,8 @@ type PageData = { answers?: Answer[]; choiceCount?: number; reviewFlags?: string
   score?: number | null; provisionalScore?: number; maximumScore?: number;
   outcomes?: Array<{ question: number; outcome: string; points: number | null }>;
   manualReview?: { reviewedAt: string; questions: number[] } };
-type ScanPage = { id: string; pageIndex: number; sheetId: string | null; status: string; data: PageData };
+type ScanPage = { id: string; pageIndex: number; sheetId: string | null; status: string; data: PageData;
+  candidate?: { name: string; code: string; ticketCode: string; workNumber?: string } | null };
 type Upload = { id: string; status: string; mime: string; error?: string | null; pages: ScanPage[] };
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const TEST = OMR_ENABLED;
@@ -22,6 +23,11 @@ const reviewReasons: Record<string, string> = {
   UNCERTAIN: "Bəzi işarələr aydın deyil.", LOW_CONFIDENCE: "Bəzi cavablar əminliklə oxunmayıb.",
   MULTIPLE: "Bir sualda birdən çox variant işarələnib.", ALL_BLANK: "Vərəqdə işarələnmiş cavab tapılmayıb.",
   IMAGE_BLURRED: "Şəkil bulanıqdır; aydın foto ilə yenidən skan etmək məsləhətdir.",
+  LOW_RESOLUTION: "Kart fotoda çox kiçikdir. Daha az kartı daha yaxından çəkin.",
+  WORK_NUMBER_UNREADABLE: "İş nömrəsinin hər sütununda bir rəqəm tam kodlanmalıdır. Kartı düzəldib yenidən skan edin.",
+  WORK_NUMBER_MISMATCH: "Kodlanmış iş nömrəsi bu karta aid biletlə uyğun deyil. Şagirdi və biletdəki nömrəni yoxlayın.",
+  UNRESOLVED_SHEETS: "Fotodakı bəzi kartların küncləri tam uyğunlaşdırılmadı. Oxunmayan kartları ayrıca çəkin.",
+  ALIGNMENT_UNCERTAIN: "Kartın bucağı və ya nişanları dəqiq tanınmadı. Telefonu kartlara paralel tutun.",
   ALIGNMENT_MARKERS_MISSING_OR_DUPLICATED: "Dörd künc nişanı tam görünmür. Vərəqi yenidən çəkin.",
   PAGE_CROPPED: "Vərəqin kənarları kəsilib. Bütün vərəqi göstərin.",
   IDENTIFIER_REQUIRED: "QR kod oxunmayıb. QR aydın görünəcək şəkildə yenidən çəkin.",
@@ -168,7 +174,12 @@ export default function OmrUploadStatus() {
       return <section key={page.id} className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Səhifə {page.pageIndex + 1} · {statuses[page.status] ?? page.status}</h2>
+            <h2 className="text-lg font-semibold">Kart {page.pageIndex + 1} · {statuses[page.status] ?? page.status}</h2>
+            {page.candidate && <div className="my-2 space-y-1 text-sm">
+              <p className="font-semibold">{page.candidate.name}</p>
+              <p>İş nömrəsi: <strong>{page.candidate.workNumber ?? "—"}</strong></p>
+              <p>Qeydiyyat kodu: <strong>{page.candidate.code}</strong> · Bilet: <strong>{page.candidate.ticketCode}</strong></p>
+            </div>}
             <p className="text-xs text-slate-500">{page.sheetId ? "QR/bilet identifikatoru uyğunlaşdırılıb" : "Təsdiqlənmiş bilet bağlantısı yoxdur"}</p>
           </div>
           {typeof data.score === "number" && <span className="font-semibold text-[#7A0014]">{data.score} / {data.maximumScore ?? "?"} bal</span>}

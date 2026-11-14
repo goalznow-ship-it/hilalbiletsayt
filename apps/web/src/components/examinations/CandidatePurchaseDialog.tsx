@@ -35,6 +35,7 @@ type ExamSession = {
 type CreatedTicket = {
   id: string;
   code: string;
+  workNumber: string;
   price: number;
   status: string;
   paymentStatus: string;
@@ -88,13 +89,14 @@ export default function CandidatePurchaseDialog({
   exam: ExamSummary;
   onClose: () => void;
 }) {
-  const { user, request, selectedBranch } = useSession();
+  const { request, selectedBranch } = useSession();
   const [sessions, setSessions] = useState<ExamSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionId, setSessionId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [form, setForm] = useState<CandidateForm>(emptyForm);
   const [branchId, setBranchId] = useState(selectedBranch || "");
+  const [branches, setBranches] = useState<Array<{ id: string; name: string; code: string; address: string | null; phone: string | null }>>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ticket, setTicket] = useState<CreatedTicket | null>(null);
@@ -102,6 +104,13 @@ export default function CandidatePurchaseDialog({
     id: string;
     candidate_number: string;
   } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    request<typeof branches>("/branches").then(data => { if (active) setBranches(data); })
+      .catch(cause => { if (active) setError(cause instanceof Error ? cause.message : "Filiallar alınmadı."); });
+    return () => { active = false; };
+  }, [request]);
 
   useEffect(() => {
     let active = true;
@@ -134,7 +143,8 @@ export default function CandidatePurchaseDialog({
   }, [exam.id, request]);
 
   const effectiveBranchId =
-    branchId || selectedBranch || user?.branches?.[0]?.id || "";
+    branchId || selectedBranch || branches[0]?.id || "";
+  const branchDetails = branches.find(branch => branch.id === effectiveBranchId);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target;
@@ -236,6 +246,7 @@ export default function CandidatePurchaseDialog({
                   Bilet kodu
                 </span>
                 <p className="font-mono text-lg font-medium">{ticket.code}</p>
+                <p className="mt-2 font-medium">İş nömrəsi: <span className="font-mono">{ticket.workNumber}</span></p>
               </div>
               <div className="text-right">
                 <span className="text-xs text-muted-foreground">Qiymət</span>
@@ -436,7 +447,7 @@ export default function CandidatePurchaseDialog({
             </div>
           </div>
 
-          {user?.branches && user.branches.length > 0 && (
+          {branches.length > 0 && (
             <div>
               <label
                 className="mb-2 block text-sm font-medium"
@@ -452,12 +463,17 @@ export default function CandidatePurchaseDialog({
                 className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
               >
                 <option value="">Filial seçilməyib</option>
-                {user.branches.map((branch) => (
+                {branches.map((branch) => (
                   <option key={branch.id} value={branch.id}>
-                    {branch.name}
+                    {branch.name} · {branch.code}
                   </option>
                 ))}
               </select>
+              {branchDetails && <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3 text-sm" aria-live="polite">
+                <p className="font-medium">{branchDetails.name} · {branchDetails.code}</p>
+                {branchDetails.address && <p className="mt-1">Ünvan: {branchDetails.address}</p>}
+                {branchDetails.phone && <p className="mt-1">Telefon: {branchDetails.phone}</p>}
+              </div>}
             </div>
           )}
 

@@ -8,30 +8,41 @@
    The key is an immutable, versioned snapshot (answers, points,
    penalties for wrong / blank / multiple marks, floor at zero) with a digest.
 2. **Answer sheet** (*OMR → Vərəqlər*): issued for a paid ticket with a
-   candidate. The A4 PDF (template `hilal-a4-v1`) carries alignment markers, a
-   QR code with a random 256-bit sheet token, and 1–150 questions × 2–5 options.
+   candidate. Enter its eight-digit work number or ticket UUID. New A4 sheets use
+   `hilal-a4-v2`: four alignment markers, an opaque QR token, 1–150 questions ×
+   2–5 options, and an eight-column work-number grid. Names and codes are printed
+   using an embedded Unicode font. Previously issued `hilal-a4-v1` sheets remain readable.
+   The on-screen sample PDF is illustrative; it is not issued to a candidate.
 3. **Scan upload** (*OMR → Skan yükləmə*): PDF/PNG/JPEG, ≤ 4 files, ≤ 25 MB each,
    50 MB per request, 240 uploads per user per hour. Originals are stored on the
    `omr_data` volume and are downloadable for comparison.
    The web form handles one file at a time and supports live rear-camera capture,
    native phone-camera capture, and gallery/file selection. Live capture preserves
-   the entire frame and produces JPEG at up to 2560 pixels on the longer side.
+   the entire frame and produces JPEG at up to 20 million pixels.
    Closing the camera, leaving the page or hiding the browser stops its tracks.
-   On touch devices automatic capture is on by default: a frame with a maximum
+   On touch devices single-card automatic capture is on by default: a frame with a maximum
    side of 480 px is sampled every 200 ms. Four marker-shaped components must form
    a sufficiently large page rectangle, and the view must remain adequately lit
    and steady for six frames. This is a framing aid, not ArUco or QR authentication;
    the worker verifies marker IDs and sheet identity. Choose the exam first.
    A captured photo is submitted automatically; successful scans cannot be submitted
    again accidentally. “Növbəti kartı skan et” opens the camera for the next sheet.
-   Browser uploads resize large phone photos to a maximum side of 2560 px without
-   cropping the page. The original selected file must still fit the 25 MB limit.
+   For multiple cards in one photo, select the group-photo mode and use the shutter
+   or the phone's native camera. Browser uploads retain up to 20 million pixels
+   without cropping. The original selected file must still fit the 25 MB limit.
+   One image may contain up to 20 separate cards; a PDF may have up to 10 pages
+   and a document at most 100 recognized card/review entries. Cards must not overlap.
 4. **Recognition** (worker, bounded subprocess): rasterise → detect markers →
    perspective/rotation correction (0/90/180/270° and skew) → read QR → measure
-   bubble fill ratios → classify each answer.
+   bubble fill ratios → classify each answer. Repeated corner IDs are grouped
+   geometrically into individual cards. Each has its own index and QR identity.
+   Unmatched markers produce a review entry rather than silently disappearing.
 5. **Binding and scoring** (API): the sheet token must belong to the same exam
    and an authorised branch; ticket/candidate must be unchanged, not cancelled
-   and paid. Scores are computed in integer thousandths.
+   and paid. On v2 the coded work number must exactly match that ticket. Names are
+   resolved from the verified ticket, not guessed from handwriting. Scores are
+   computed in integer thousandths. Private scan results and CSV/Excel/PDF exports
+   include the candidate name, registration code, ticket code and work number.
 6. **Review queue**: anything doubtful goes to `REVIEW`; a person decides.
 7. **Publication**: see [OPERATIONS.md](OPERATIONS.md#results-publication).
 
@@ -43,6 +54,9 @@
 | Two or more marks on one question | `MULTIPLE` |
 | Sheet with no marks at all | `ALL_BLANK` |
 | Blurred image (Laplacian variance < 25) | `IMAGE_BLURRED` |
+| Card shorter edge below 600 source pixels | `LOW_RESOLUTION` |
+| Some cards' markers cannot form complete groups | `UNRESOLVED_SHEETS` |
+| Missing/ambiguous work-number digits or disagreement with QR ticket | `WORK_NUMBER_UNREADABLE`, `WORK_NUMBER_MISMATCH` |
 | Markers missing/duplicated, page cropped | `ALIGNMENT_MARKERS_MISSING_OR_DUPLICATED`, `PAGE_CROPPED` |
 | QR unreadable or unknown sheet | `IDENTIFIER_REQUIRED`, `IDENTITY_NOT_AUTHORIZED_FOR_EXAM` |
 | Ticket/candidate changed, cancelled or unpaid | `TICKET_IDENTITY_OR_STATUS_CHANGED` |
@@ -77,6 +91,9 @@ score-only records remain readable without fabricated answer details.
   sharp.
 * Candidates fill bubbles completely with a dark pen; corrections cause
   `UNCERTAIN`/`MULTIPLE` and need review.
+* On v2, copy the ticket's eight-digit work number left to right, marking exactly
+  one digit in each column. An invalid identity requires correction and a fresh
+  photo; an answer reviewer cannot assign it to a different pupil.
 * [Live camera access requires a secure context and camera permission](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia).
   Use HTTPS on phones. Native photo capture and file selection remain available
   when live access fails. HEIC is not supported; use live capture or export JPEG.
@@ -107,7 +124,17 @@ docker run --rm -v "$PWD/services/omr-worker":/src -w /src -e PYTHONPATH=/src --
 
 * Recognition is synchronous per request (worker timeout 110 s); there is no
   background queue yet.
-* Only template `hilal-a4-v1`; up to 150 questions and 5 options.
+* Only issued `hilal-a4-v1` and `hilal-a4-v2` cards; up to 150 questions and 5 options.
 * Fixtures are synthetic renders, not photos of real printed sheets. Validate
   with a batch of real scans from each branch printer/scanner before the first
   live exam.
+
+## Release order
+
+Apply migration `20261114000100_ticket_work_number` before starting the updated
+API. It gives existing tickets unique work numbers while preserving their codes;
+new staff and online sales receive numbers from the same non-cycling sequence.
+Deploy API and worker together: the updated worker recognizes v2 and provides
+the Unicode `/api/omr/report` PDF endpoint. The public results lookup still requires
+the ticket reference and private candidate code; a predictable work number alone
+does not grant access to results.

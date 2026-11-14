@@ -6,23 +6,27 @@ BLANK_MAX = .12
 MARK_MIN = .50
 
 
+def bubble_fills(grey, centers):
+    fills, ring_integrity = [], []
+    radius = BUBBLE_RADIUS * PX_PER_MM
+    for bx, by in centers:
+        x, y = round(bx * PX_PER_MM), round(by * PX_PER_MM)
+        d = int(radius * 1.8)
+        crop = grey[y-d:y+d+1, x-d:x+d+1].astype(float)
+        yy, xx = np.mgrid[-d:d+1, -d:d+1]
+        distance = np.sqrt(xx*xx + yy*yy)
+        white = float(np.percentile(crop[distance > radius * 1.45], 80))
+        cutoff = min(180, white * .72)
+        fills.append(float(np.mean(crop[distance < radius * .66] < cutoff)))
+        ring_integrity.append(float(np.mean(crop[(distance > radius * .85) &
+                                                   (distance < radius * 1.15)] < cutoff)))
+    return fills, ring_integrity
+
+
 def read_answers(grey: np.ndarray, spec: TemplateSpec):
     answers = []
-    radius = BUBBLE_RADIUS * PX_PER_MM
     for q in range(spec.question_count):
-        fills, ring_integrity = [], []
-        for c in range(spec.choice_count):
-            bx, by = spec.bubble(q, c)
-            x, y = round(bx * PX_PER_MM), round(by * PX_PER_MM)
-            d = int(radius * 1.8)
-            crop = grey[y-d:y+d+1, x-d:x+d+1].astype(float)
-            yy, xx = np.mgrid[-d:d+1, -d:d+1]
-            distance = np.sqrt(xx*xx + yy*yy)
-            white = float(np.percentile(crop[distance > radius * 1.45], 80))
-            cutoff = min(180, white * .72)
-            fills.append(float(np.mean(crop[distance < radius * .66] < cutoff)))
-            ring_integrity.append(float(np.mean(crop[(distance > radius * .85) &
-                                                       (distance < radius * 1.15)] < cutoff)))
+        fills, ring_integrity = bubble_fills(grey, [spec.bubble(q, c) for c in range(spec.choice_count)])
         marked = [spec.choices[i] for i, value in enumerate(fills) if value >= MARK_MIN]
         ambiguous = any(BLANK_MAX < value < MARK_MIN for value in fills)
         # Missing outlines indicate a damaged/misaligned grid, not unanswered questions.

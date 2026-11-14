@@ -10,9 +10,11 @@ import { formatAzn } from "@/lib/money";
 type Ticket = {
   id: string;
   code: string;
+  workNumber: string;
   examTitle: string;
   candidateFullName: string | null;
   branchName: string | null;
+  branchCode: string | null;
   price: number;
   status: string;
   paymentStatus: string;
@@ -103,8 +105,9 @@ export default function TicketsPage() {
                   {ticket.code}
                 </Link>
                 <h2>{ticket.examTitle}</h2>
+                <p className="font-medium">İş nömrəsi: <span className="font-mono">{ticket.workNumber}</span></p>
                 <p>
-                  {ticket.candidateFullName} · {ticket.branchName}
+                  {ticket.candidateFullName} · {ticket.branchName}{ticket.branchCode ? ` (${ticket.branchCode})` : ""}
                 </p>
                 <p>
                   {formatAzn(ticket.price)} ·{" "}

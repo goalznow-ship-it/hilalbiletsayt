@@ -22,11 +22,14 @@ def _child(connection, operation, args):
         if operation == "process":
             from .pipeline import process_batch
             result = process_batch(args)
+        elif operation == "report":
+            from .results_pdf import generate_report
+            result = generate_report(args)
         else:
             from .pdf_generator import generate_pdf
             from .template_manager import TemplateSpec
             args = dict(args)
-            spec = TemplateSpec(args.pop("questionCount"), args.pop("choiceCount"))
+            spec = TemplateSpec(args.pop("questionCount"), args.pop("choiceCount"), args.pop("templateVersion", "hilal-a4-v1"))
             result = generate_pdf(spec=spec, **args)
         connection.send((True, result))
     except Exception:

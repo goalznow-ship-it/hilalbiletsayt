@@ -3,16 +3,19 @@ import fitz
 import numpy as np
 import pytest
 from app.omr.pdf_generator import generate_pdf, MM
-from app.omr.template_manager import TemplateSpec, BUBBLE_RADIUS
+from app.omr.template_manager import TemplateSpec, BUBBLE_RADIUS, work_number_bubble
 from app.omr.document_loader import document_images, InvalidDocument, MAX_BYTES
 from app.omr.pipeline import process_image, process_document, process_batch
 
 TOKEN = "a" * 43
 
 
-def sheet(spec=TemplateSpec(20, 5), marks=None, token=TOKEN, variant="A"):
-    data = generate_pdf(token, spec, exam="EX-1", variant=variant, ticket="HK-1", candidate="QD-1")
+def sheet(spec=TemplateSpec(20, 5), marks=None, token=TOKEN, variant="A", work_number=""):
+    data = generate_pdf(token, spec, exam="EX-1", variant=variant, ticket="HK-1", candidate="QD-1", workNumber=work_number)
     with fitz.open(stream=data, filetype="pdf") as doc:
+        for column, digit in enumerate(work_number):
+            x, y = work_number_bubble(column, int(digit))
+            doc[0].draw_circle((x * MM, y * MM), BUBBLE_RADIUS * .9 * MM, fill=(0,), color=(0,))
         for q, choices in (marks or {}).items():
             for choice in choices:
                 x, y = spec.bubble(q, choice)

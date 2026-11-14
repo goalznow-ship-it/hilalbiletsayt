@@ -31,7 +31,6 @@ export type PublicSession = {
   startsAt: string;
   endsAt: string;
   venue: string | null;
-  remaining: number;
 };
 export type PublicExam = {
   id: string;
@@ -41,7 +40,7 @@ export type PublicExam = {
   price: number;
   sessions: PublicSession[];
 };
-export type PublicBranch = { id: string; name: string; address: string | null };
+export type PublicBranch = { id: string; name: string; code: string; address: string | null; phone: string | null };
 export function sessionDate(value: string) {
   return new Date(value).toLocaleString("az-AZ", {
     timeZone: "Asia/Baku",

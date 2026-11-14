@@ -8,7 +8,6 @@ import { AuditService } from "../audit/audit.service";
 import { AuthenticatedUser, isCentralAdmin } from "../auth/authorization";
 import { issueSchema, keySchema, reviewSchema, pageSchema, KeyAnswer, Rules, ReadPage, scorePage, workerResultSchema } from "./omr.contract";
 import { omrXlsx } from "./omr.xlsx";
-import { omrResultsPdf } from "./omr.pdf";
 
 export type ScanFile = { buffer: Buffer; originalname: string; mimetype: string; size: number };
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
@@ -93,8 +92,10 @@ export class OmrService {
     const parsed = issueSchema.safeParse(input);
     if (!parsed.success) throw new BadRequestException("Bilet və cavab açarı ID-lərini yoxlayın.");
     return this.prisma.$transaction(async tx => {
-      await tx.$queryRawUnsafe('SELECT "id" FROM "tickets" WHERE "id" = $1::uuid FOR UPDATE', parsed.data.ticketId);
-      const ticket = await tx.ticket.findUnique({ where: { id: parsed.data.ticketId } });
+      if (parsed.data.ticketId)
+        await tx.$queryRawUnsafe('SELECT "id" FROM "tickets" WHERE "id" = $1::uuid FOR UPDATE', parsed.data.ticketId);
+      else await tx.$queryRawUnsafe('SELECT "id" FROM "tickets" WHERE "work_number" = $1 FOR UPDATE', parsed.data.workNumber);
+      const ticket = await tx.ticket.findUnique({ where: parsed.data.ticketId ? { id: parsed.data.ticketId } : { workNumber: parsed.data.workNumber } });
       if (!ticket) throw new NotFoundException("Bilet tapılmadı.");
       this.assertBranch(user, ticket.branchId);
       if (!ticket.candidateId || ticket.status === "CANCELLED" || (ticket.price > 0 && ticket.paymentStatus !== "PAID"))
@@ -106,7 +107,7 @@ export class OmrService {
         if (existing.answerKeyId !== key.id) throw new ConflictException("Bilet üçün başqa cavab açarı ilə vərəq artıq verilib.");
         return { id: existing.id, templateVersion: existing.templateVersion };
       }
-      const sheet = await tx.omrSheet.create({ data: { token: randomBytes(32).toString("base64url"),
+      const sheet = await tx.omrSheet.create({ data: { token: randomBytes(32).toString("base64url"), templateVersion: "hilal-a4-v2",
         ticketId: ticket.id, answerKeyId: key.id, candidateId: ticket.candidateId, examId: ticket.examId, branchId: ticket.branchId! } });
       await this.audit.log("OMR_SHEET_ISSUED", user.userId, "OmrSheet", sheet.id, { ticketId: ticket.id, answerKeyId: key.id }, tx);
       return { id: sheet.id, templateVersion: sheet.templateVersion };
@@ -124,7 +125,8 @@ export class OmrService {
     const response = await this.worker("sheets", JSON.stringify({ token: sheet.token,
       questionCount: (sheet.answerKey.answers as KeyAnswer[]).length, choiceCount: sheet.answerKey.choiceCount,
       exam: sheet.ticket.exam.code, variant: sheet.answerKey.variant,
-      ticket: sheet.ticket.code, candidate: sheet.ticket.candidate!.candidate_number }), { "Content-Type": "application/json" });
+      ticket: sheet.ticket.code, candidate: sheet.ticket.candidate!.candidate_number,
+      candidateName: sheet.ticket.candidate!.full_name, workNumber: sheet.ticket.workNumber, templateVersion: sheet.templateVersion }), { "Content-Type": "application/json" });
     return Buffer.from(await response.arrayBuffer());
   }
 
@@ -133,7 +135,8 @@ export class OmrService {
       where: { id },
       include: { pages: {
         orderBy: { pageIndex: "asc" },
-        include: { sheet: { select: { branchId: true } } },
+        include: { sheet: { select: { branchId: true, candidateId: true,
+          ticket: { select: { code: true, workNumber: true, candidateId: true, candidate: { select: { full_name: true, candidate_number: true } } } } } } },
       } },
     });
     if (!upload) throw new NotFoundException();
@@ -154,7 +157,11 @@ export class OmrService {
       }
     }
     // Do not change the existing response shape by returning sheet metadata.
-    return { ...upload, pages: upload.pages.map(({ sheet, ...page }) => page) };
+    return { ...upload, pages: upload.pages.map(({ sheet, ...page }) => ({ ...page,
+      candidate: sheet?.ticket?.candidate && sheet.candidateId === sheet.ticket.candidateId
+        ? { name: sheet.ticket.candidate.full_name, code: sheet.ticket.candidate.candidate_number, ticketCode: sheet.ticket.code, workNumber: sheet.ticket.workNumber }
+        : null,
+    })) };
   }
 
   async listKeys(examId: string, user: AuthenticatedUser) {
@@ -208,11 +215,12 @@ export class OmrService {
         sheetId: { not: null }, status: "COMPLETED" },
       include: { upload: { select: { createdBy: true } },
         sheet: { select: { branchId: true, ticketId: true, candidateId: true,
-          answerKey: { select: { variant: true } } } } },
+          answerKey: { select: { variant: true } },
+          ticket: { select: { code: true, workNumber: true, candidateId: true, candidate: { select: { full_name: true, candidate_number: true } } } } } } },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 5000,
     });
     const rows: Array<Array<string | number>> = [["page_id", "upload_id", "ticket_id", "candidate_id", "branch_id",
-      "variant", "score", "maximum_score", "status"]];
+      "variant", "score", "maximum_score", "status", "candidate_name", "candidate_code", "ticket_code", "work_number"]];
     for (const page of pages) {
       if (!page.sheet || !this.branchAllowed(user, page.sheet.branchId)) continue;
       const data = page.data && typeof page.data === "object" && !Array.isArray(page.data)
@@ -220,7 +228,10 @@ export class OmrService {
       if (typeof data.score !== "number" || typeof data.maximumScore !== "number") continue;
       rows.push([page.id, page.uploadId, page.sheet.ticketId, page.sheet.candidateId,
         page.sheet.branchId, page.sheet.answerKey.variant, data.score,
-        data.maximumScore, page.status]);
+        data.maximumScore, page.status,
+        page.sheet.candidateId === page.sheet.ticket.candidateId ? page.sheet.ticket.candidate?.full_name ?? "" : "",
+        page.sheet.candidateId === page.sheet.ticket.candidateId ? page.sheet.ticket.candidate?.candidate_number ?? "" : "",
+        page.sheet.ticket.code, page.sheet.ticket.workNumber]);
     }
     return rows;
   }
@@ -241,7 +252,9 @@ export class OmrService {
   }
 
   async exportPdf(examId: string, user: AuthenticatedUser): Promise<Buffer> {
-    return omrResultsPdf(await this.resultRows(examId, user));
+    const response = await this.worker("report", JSON.stringify({ rows: await this.resultRows(examId, user) }),
+      { "Content-Type": "application/json" });
+    return Buffer.from(await response.arrayBuffer());
   }
 
   async reviewPage(uploadId: string, pageId: string, input: unknown, user: AuthenticatedUser) {
@@ -276,6 +289,8 @@ export class OmrService {
       if (!initial.success) throw new ConflictException("Skan məlumatlarının formatı düzgün deyil.");
       if (sheet.templateVersion !== initial.data.templateVersion)
         throw new ConflictException("Vərəq şablonunun versiyası uyğun deyil.");
+      if (initial.data.templateVersion === "hilal-a4-v2" && initial.data.workNumber !== sheet.ticket.workNumber)
+        throw new ConflictException("Kodlanmış iş nömrəsi biletlə uyğun deyil. Kartı yenidən skan edin.");
       const answerCount = initial.data.answers.length;
       const choices = sheet.answerKey.choiceCount;
       const answers = initial.data.answers.map(a => ({ ...a, marked: [...a.marked], fillRatios: [...a.fillRatios] }));
@@ -306,7 +321,7 @@ export class OmrService {
       const identity = { sheetId: sheet.id, ticketId: sheet.ticketId,
         candidateId: sheet.candidateId, examId: sheet.examId,
         answerKeyId: sheet.answerKeyId, keyVersion: sheet.answerKey.version,
-        keyDigest: sheet.answerKey.digest, variant: sheet.answerKey.variant };
+        keyDigest: sheet.answerKey.digest, variant: sheet.answerKey.variant, workNumber: sheet.ticket.workNumber };
       const revised = {
         ...saved, answers, ...scored, identity, status: "READ", reviewFlags: [],
         recognizedAnswers: saved.recognizedAnswers ?? initial.data.answers,
@@ -414,10 +429,13 @@ export class OmrService {
     if (!sheetToken) return review("IDENTIFIER_REQUIRED");
     const sheet = await tx.omrSheet.findUnique({ where: { token: sheetToken }, include: { answerKey: true, ticket: true, result: true } });
     if (!sheet || sheet.examId !== examId || !this.branchAllowed(user, sheet.branchId)) return review("IDENTITY_NOT_AUTHORIZED_FOR_EXAM");
+    if (page.templateVersion !== sheet.templateVersion) return review("TEMPLATE_KEY_MISMATCH");
+    if (page.templateVersion === "hilal-a4-v2" && (!page.workNumber || page.workNumber !== sheet.ticket.workNumber))
+      return review(page.workNumber ? "WORK_NUMBER_MISMATCH" : "WORK_NUMBER_UNREADABLE");
     if (sheet.candidateId !== sheet.ticket.candidateId || sheet.examId !== sheet.ticket.examId || sheet.branchId !== sheet.ticket.branchId ||
         sheet.answerKey.examId !== examId || sheet.ticket.status === "CANCELLED" || (sheet.ticket.price > 0 && sheet.ticket.paymentStatus !== "PAID")) return review("TICKET_IDENTITY_OR_STATUS_CHANGED");
     const identity = { sheetId: sheet.id, ticketId: sheet.ticketId, candidateId: sheet.candidateId, examId,
-      answerKeyId: sheet.answerKeyId, keyVersion: sheet.answerKey.version, keyDigest: sheet.answerKey.digest, variant: sheet.answerKey.variant };
+      answerKeyId: sheet.answerKeyId, keyVersion: sheet.answerKey.version, keyDigest: sheet.answerKey.digest, variant: sheet.answerKey.variant, workNumber: sheet.ticket.workNumber };
     if (sheet.result) return { sheetId: null, status: "DUPLICATE", data: json({ duplicateOf: sheet.result.id, reviewFlags: ["SHEET_ALREADY_PROCESSED"] }) };
     try {
       const scored = scorePage(page, sheet.answerKey.answers as KeyAnswer[], sheet.answerKey.scoring as Rules, sheet.answerKey.choiceCount);

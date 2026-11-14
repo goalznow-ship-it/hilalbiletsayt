@@ -754,8 +754,7 @@ export default function Page() {
                     </option>
                     {openSessions.map((session) => (
                       <option key={session.id} value={session.id}>
-                        {session.sessionCode} — {session.venue || "Məkan yoxdur"} (
-                        {session.capacity})
+                        {session.sessionCode} — {session.venue || "Məkan yoxdur"}
                       </option>
                     ))}
                   </select>

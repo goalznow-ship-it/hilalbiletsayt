@@ -59,6 +59,7 @@ function OmrUploadForm() {
   const [exams, setExams] = useState<Exam[]>([]);
   const [examId, setExamId] = useState(() => UUID_RE.test(params.get("examId") ?? "") ? params.get("examId")! : "");
   const [file, setFile] = useState<File | null>(null);
+  const [multipleSheets, setMultipleSheets] = useState(false);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -174,7 +175,8 @@ function OmrUploadForm() {
           : "Kartın QR və filial əlaqəsi təsdiqlənmədi. QR və dörd künc tam görünəcək şəkildə yenidən çəkin. Detalları mərkəzi administrator yoxlaya bilər.");
       } else setNotice(restricted && feedback.kind === "pending"
         ? "Skan hələ emal olunur. Bir qədər sonra eyni faylla yenidən yoxlayın."
-        : feedback.message);
+        : feedback.message + ("pages" in first && Array.isArray(first.pages)
+          ? ` ${first.pages.filter((page: { sheetId?: string | null }) => page.sheetId).length} kart uyğunlaşdırılıb; ${first.pages.filter((page: { status?: string }) => page.status === "REVIEW").length} yoxlama tələb edir.` : ""));
       if ((feedback.kind === "success" || feedback.kind === "review") && !processedIds.current.has(first.id)) {
         processedIds.current.add(first.id);
         setProcessed(processedIds.current.size);
@@ -202,7 +204,7 @@ function OmrUploadForm() {
             Skan yükləmə
           </h1>
           <p className="mt-2 text-sm text-slate-500">
-            İmtahanı seçin, cavab kartını telefonla çəkin və ya PDF/şəkil yükləyin.
+            İmtahanı seçin. Bir fotoda bir və ya bir neçə cavab kartı ola bilər; hər kart ayrıca yoxlanılır.
           </p>
           {processed > 0 && <p className="mt-2 text-sm font-medium text-primary">Bu sessiyada {processed} skan emal edilib.</p>}
         </div>
@@ -254,7 +256,12 @@ function OmrUploadForm() {
           </div>
 
           {!examId && <p className="rounded-lg bg-muted p-4 text-sm text-muted-foreground">Başlamaq üçün imtahanı seçin. Kamera və fayl yükləmə bundan sonra açılacaq.</p>}
-          {UPLOAD_ENABLED && user && examId && !uploading && !file && <OmrCamera key={examId} autoStart={resumeCamera} onCapture={(next, source) => selectFile(next, source)} />}
+          <label className="flex min-h-11 items-center gap-3 text-sm font-medium">
+            <input type="checkbox" checked={multipleSheets} disabled={uploading || !!file}
+              onChange={event => setMultipleSheets(event.target.checked)} className="size-5 accent-primary" />
+            Bir fotoda bir neçə kart çəkirəm
+          </label>
+          {UPLOAD_ENABLED && user && examId && !uploading && !file && <OmrCamera key={`${examId}:${multipleSheets}`} multipleSheets={multipleSheets} autoStart={resumeCamera} onCapture={(next, source) => selectFile(next, source)} />}
 
           <div className="space-y-2">
             <label
@@ -278,8 +285,11 @@ function OmrUploadForm() {
             />
 
             <p className="text-xs text-slate-500">
-              PDF, JPEG və PNG: maksimum 25 MB. Böyük telefon şəkilləri avtomatik kiçildilir. Yalnız sistemdə yaradılmış QR-li cavab kartları tanınır.
+              PDF, JPEG və PNG: maksimum 25 MB. Bir fotoda maksimum 20 kart, PDF-də maksimum 10 səhifə və ümumilikdə 100 kart.
+              20 meqapikselə qədər keyfiyyət saxlanılır. Hər kartın QR kodu və dörd küncü görünməlidir; kartları üst-üstə qoymayın.
+              Kiçik və aydın oxunmayan kartları daha yaxından çəkin. Yalnız sistemdə yaradılmış QR-li kartlar tanınır.
             </p>
+            <Link href="/dashboard/omr/sheets" className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline">Tanınan kart nümunəsi və PDF şablonu</Link>
           </div>
 
           {file && (

@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { analyzeFrame, frameGuidance, detectSheetFrame, AUTO_CAPTURE } from '@/lib/omr-scan';
+import { analyzeFrame, frameGuidance, detectSheetFrame, omrImageScale, AUTO_CAPTURE } from '@/lib/omr-scan';
 
 export type CaptureSource = 'auto' | 'manual';
 
-export function OmrCamera({ onCapture, autoStart = false }: { onCapture: (file: File, source: CaptureSource) => void; autoStart?: boolean }) {
+export function OmrCamera({ onCapture, autoStart = false, multipleSheets = false }: { onCapture: (file: File, source: CaptureSource) => void; autoStart?: boolean; multipleSheets?: boolean }) {
   const video = useRef<HTMLVideoElement>(null);
   const nativeInput = useRef<HTMLInputElement>(null);
   const stream = useRef<MediaStream | null>(null);
@@ -47,7 +47,7 @@ export function OmrCamera({ onCapture, autoStart = false }: { onCapture: (file: 
     close(); setError('');
     // Hands-free capture is the default on phones; desktop operators keep the shutter.
     if (autoPref.current === null)
-      autoPref.current = window.matchMedia?.('(pointer: coarse)')?.matches ?? false;
+      autoPref.current = !multipleSheets && (window.matchMedia?.('(pointer: coarse)')?.matches ?? false);
     setAuto(autoPref.current);
     if (!window.isSecureContext) {
       setError('Canlı kamera üçün saytı HTTPS ilə açın. Hazırda “Telefonla şəkil çək” və ya fayl seçimi ilə davam edə bilərsiniz.');
@@ -62,7 +62,7 @@ export function OmrCamera({ onCapture, autoStart = false }: { onCapture: (file: 
     try {
       const media = await navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 2560 } },
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 4032 }, height: { ideal: 3024 } },
       });
       // Permission can resolve after cancel, navigation, or switching apps.
       if (current !== attempt.current || !video.current) {
@@ -84,7 +84,7 @@ export function OmrCamera({ onCapture, autoStart = false }: { onCapture: (file: 
           ? 'Kamera tapılmadı. Fayl seçimi ilə skanı yükləyə bilərsiniz.'
           : 'Kamera açıla bilmədi. Kameranı istifadə edən başqa tətbiqi bağlayın və ya “Telefonla şəkil çək” seçin.');
     }
-  }, [close]);
+  }, [close, multipleSheets]);
 
   useEffect(() => {
     if (!autoStart) return;
@@ -106,9 +106,9 @@ export function OmrCamera({ onCapture, autoStart = false }: { onCapture: (file: 
     setBusy(true);
     try {
       const canvas = document.createElement('canvas');
-      const scale = Math.min(1, 2560 / Math.max(element.videoWidth, element.videoHeight));
-      canvas.width = Math.round(element.videoWidth * scale);
-      canvas.height = Math.round(element.videoHeight * scale);
+      const scale = omrImageScale(element.videoWidth, element.videoHeight);
+      canvas.width = Math.floor(element.videoWidth * scale);
+      canvas.height = Math.floor(element.videoHeight * scale);
       const context = canvas.getContext('2d');
       if (!context) throw new Error('Canvas unavailable');
       // Preserve the entire frame, including the four alignment markers.
@@ -131,7 +131,7 @@ export function OmrCamera({ onCapture, autoStart = false }: { onCapture: (file: 
   // Automatic shutter: the frame must be light enough and still for one second.
   // Four marker-shaped corners must also remain in view; the worker verifies their identities.
   useEffect(() => {
-    if (!active || !ready || !auto) return;
+    if (!active || !ready || !auto || multipleSheets) return;
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d', { willReadFrequently: true });
     if (!context) return;
@@ -178,17 +178,19 @@ export function OmrCamera({ onCapture, autoStart = false }: { onCapture: (file: 
       void capture('auto');
     }, 200);
     return () => window.clearInterval(timer);
-  }, [active, ready, auto, capture]);
+  }, [active, ready, auto, capture, multipleSheets]);
 
   return <div className="space-y-3 rounded-lg border border-slate-200 p-3 sm:p-4">
     <p className="font-medium text-slate-800">Telefonla cavab kartını skan et</p>
-    <p className="text-sm text-slate-600">Kartı düz və işıqlı səthə qoyun. Dörd künc nişanı və QR tam görünsün. Avtomatik rejimdə künclər görünəndə və görüntü sabitləşəndə skan başlayır.</p>
-    <label className="flex items-start gap-2 text-sm text-slate-700">
+    <p className="text-sm text-slate-600">{multipleSheets
+      ? 'Kartları yanaşı, üst-üstə düşmədən yerləşdirin. Hər kartın QR kodu və dörd küncü görünsün. Hamısını bir fotoda çəkin. 10+ kart üçün telefonun əsas kamerasında tam keyfiyyətli foto çəkmək daha uyğundur.'
+      : 'Kartı düz və işıqlı səthə qoyun. Dörd künc nişanı və QR tam görünsün. Avtomatik rejimdə künclər görünəndə və görüntü sabitləşəndə skan başlayır.'}</p>
+    {!multipleSheets && <label className="flex items-start gap-2 text-sm text-slate-700">
       <input type="checkbox" checked={auto} disabled={!active}
         onChange={event => { autoPref.current = event.target.checked; setAuto(event.target.checked); setGuide(''); }}
         className="mt-0.5 h-5 w-5 accent-[#7A0014]" />
       <span>Avtomatik çəkim — kart hazır olanda özü çəkir</span>
-    </label>
+    </label>}
     <div className="flex flex-wrap gap-2">
       <button type="button" onClick={() => void open()} disabled={opening || active}
         className="rounded-lg bg-[#7A0014] px-4 py-3 text-sm font-semibold text-white disabled:opacity-40">

@@ -2390,3 +2390,31 @@ input[type="checkbox"] {
   .omr-review-table td { display: block; min-width: 0; }
   .omr-review-table td::before { content: attr(data-label); display: block; margin-bottom: 4px; color: var(--muted-foreground); font-size: 12px; font-weight: 400; }
 }
+
+/* The same ticket is used for online receipts, staff sales and A4 printing. */
+.exam-ticket { width: 100%; max-width: 760px; margin: 0 auto; overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background: white; color: #202026; box-shadow: 0 12px 40px #30000c0a; }
+.exam-ticket-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; padding: 24px 28px; background: #7a0014; color: white; }
+.exam-ticket-body { padding: 28px; }
+.exam-ticket-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 24px; }
+.exam-ticket-number { border-left: 2px solid #7a0014; padding-left: 16px; }
+.exam-ticket-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 24px; padding: 24px 0; }
+.exam-ticket-fields dt { color: #66646b; font-size: 12px; margin-bottom: 5px; }
+.exam-ticket-fields dd { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.exam-ticket-branch { border: 1px solid #eae5e6; border-radius: 10px; padding: 16px; background: #faf8f8; }
+.exam-ticket-footer { display: flex; align-items: center; gap: 24px; padding: 24px 28px; border-top: 1px dashed #bfb6b8; }
+.exam-ticket-qr { flex-shrink: 0; padding: 10px; border: 1px solid #eae5e6; border-radius: 10px; background: white; }
+@media (max-width: 639px) {
+  .exam-ticket-header, .exam-ticket-body, .exam-ticket-footer { padding: 20px; }
+  .exam-ticket-heading { grid-template-columns: 1fr; gap: 20px; }
+  .exam-ticket-fields { grid-template-columns: 1fr; }
+  .exam-ticket-footer { flex-wrap: wrap; }
+  .exam-ticket-footer > div:first-child { flex-basis: 160px; }
+}
+@media print {
+  .exam-ticket { border-radius: 0; font-size: 10pt; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .exam-ticket-header { background: white; color: #7a0014; border-bottom: 1px solid #d4d4d8; }
+  .exam-ticket-heading { grid-template-columns: minmax(0, 1fr) auto; }
+  .exam-ticket-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px; padding: 18px 0; }
+  .exam-ticket-body, .exam-ticket-header, .exam-ticket-footer { padding: 20px 24px; }
+  .exam-ticket-footer { flex-wrap: nowrap; }
+}

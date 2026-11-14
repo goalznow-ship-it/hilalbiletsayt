@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { prepareOmrFile, omrUploadFeedback, analyzeFrame, frameGuidance, detectSheetFrame, AUTO_CAPTURE } from '../src/lib/omr-scan.ts';
+import { prepareOmrFile, omrImageScale, omrUploadFeedback, analyzeFrame, frameGuidance, detectSheetFrame, AUTO_CAPTURE } from '../src/lib/omr-scan.ts';
+
+test('group photos retain detail while respecting the decoder pixel limit', () => {
+  assert.equal(omrImageScale(4032, 3024), 1);
+  assert.equal(omrImageScale(5200, 2800), 1);
+  const scale = omrImageScale(8000, 6000);
+  assert.ok(scale < 1);
+  assert.ok(Math.floor(8000 * scale) * Math.floor(6000 * scale) <= 20_000_000);
+});
 
 test('OMR accepts PDF and phone JPEG/PNG, including missing browser MIME', async () => {
   for (const [name, type, signature] of [

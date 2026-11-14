@@ -6,6 +6,7 @@ markers have 8 mm sides. Three columns have up to 50 rows at 3.8 mm pitch.
 from dataclasses import dataclass
 
 VERSION = "hilal-a4-v1"
+CODED_VERSION = "hilal-a4-v2"
 WIDTH_MM, HEIGHT_MM = 210, 297
 PX_PER_MM = 6
 MARKER_SIZE = 8
@@ -18,12 +19,15 @@ BUBBLE_RADIUS = 1.2
 class TemplateSpec:
     question_count: int = 150
     choice_count: int = 5
+    version: str = VERSION
 
     def __post_init__(self):
         if type(self.question_count) is not int or not 1 <= self.question_count <= 150:
             raise ValueError("question_count must be 1..150")
         if type(self.choice_count) is not int or not 2 <= self.choice_count <= 5:
             raise ValueError("choice_count must be 2..5")
+        if self.version not in (VERSION, CODED_VERSION):
+            raise ValueError("Unknown template version")
 
     @property
     def choices(self):
@@ -37,3 +41,7 @@ class TemplateSpec:
 
 
 DEFAULT_TEMPLATE = TemplateSpec()
+
+
+def work_number_bubble(column: int, digit: int):
+    return 56 + column * 3.2, 105 + digit * 3.8

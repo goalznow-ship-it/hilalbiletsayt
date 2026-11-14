@@ -113,7 +113,9 @@ describe("Audit regressions against real HTTP and PostgreSQL", () => {
     await request(app.getHttpServer()).patch(`/api/exam-sessions/${session.body.id}`).set("Authorization", admin).send({ status: "OPEN" }).expect(200);
     const visible = (await catalog()).find((row: { id: string }) => row.id === exam.body.id);
     expect(visible.price).toBe(3500);
-    expect(visible.sessions[0].remaining).toBe(2);
+    expect(visible.sessions[0].id).toBe(session.body.id);
+    expect(visible.sessions[0]).not.toHaveProperty("remaining");
+    expect(visible.sessions[0]).not.toHaveProperty("capacity");
     expect(await prisma.auditLog.count({ where: { entityId: exam.body.id, action: "EXAM_CREATED" } })).toBe(1);
   });
 

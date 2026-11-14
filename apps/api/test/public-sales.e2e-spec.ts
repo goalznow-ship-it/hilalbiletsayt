@@ -87,10 +87,11 @@ describe("Public sales HTTP and real database", () => {
       .get("/api/public/exams")
       .expect(200);
     expect(response.headers["cache-control"]).toBe("no-store");
-    expect(
-      response.body.exams.find((exam: { id: string }) => exam.id === examId)
-        .sessions[0].remaining,
-    ).toBe(10);
+    const session = response.body.exams.find((exam: { id: string }) => exam.id === examId).sessions[0];
+    expect(session.id).toBe(sessionId);
+    for (const field of ["remaining", "capacity", "_count", "registered"])
+      expect(session).not.toHaveProperty(field);
+    expect(response.body.branches.find((branch: { id: string }) => branch.id === branchId)).toHaveProperty("code");
     expect(JSON.stringify(response.body)).not.toContain("createdBy");
   });
   it("validates input and rejects price, candidateId and payment-status injection", async () => {
@@ -136,6 +137,9 @@ describe("Public sales HTTP and real database", () => {
       .expect(200);
     expect(receipt.body.candidate.full_name).toBe(data.fullName);
     expect(receipt.body.candidate.candidate_number).toBeTruthy();
+    expect(receipt.body.workNumber).toMatch(/^[0-9]{8}$/);
+    expect(receipt.body.workNumber).toBe(ticket.workNumber);
+    expect(receipt.body.branch).toHaveProperty("code");
     await request(app.getHttpServer()).post("/api/public/results/lookup")
       .send({ ticket: ticket.code, candidateNumber: receipt.body.candidate.candidate_number }).expect(404);
     expect(receipt.body.candidate.phone).toBeUndefined();

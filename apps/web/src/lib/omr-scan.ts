@@ -1,6 +1,10 @@
 const MAX_SIZE = 25 * 1024 * 1024;
 const TYPES: Record<string, string> = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' };
 
+export function omrImageScale(width: number, height: number): number {
+  return Math.min(1, Math.sqrt(20_000_000 / (width * height)));
+}
+
 export async function prepareOmrFile(file: File): Promise<File> {
   if (!file.size || file.size > MAX_SIZE)
     throw new Error('Fayl boş olmamalı və 25 MB-ı keçməməlidir.');
@@ -20,17 +24,18 @@ export async function prepareOmrFile(file: File): Promise<File> {
       const photo = new Image();
       photo.src = url;
       await photo.decode();
-      const scale = Math.min(1, 2560 / Math.max(photo.naturalWidth, photo.naturalHeight));
+      const scale = omrImageScale(photo.naturalWidth, photo.naturalHeight);
       if (scale < 1) {
         const canvas = document.createElement('canvas');
-        canvas.width = Math.round(photo.naturalWidth * scale);
-        canvas.height = Math.round(photo.naturalHeight * scale);
+        canvas.width = Math.floor(photo.naturalWidth * scale);
+        canvas.height = Math.floor(photo.naturalHeight * scale);
         const context = canvas.getContext('2d');
         if (!context) throw new Error('Canvas unavailable');
         context.fillStyle = '#ffffff'; context.fillRect(0, 0, canvas.width, canvas.height);
         context.drawImage(photo, 0, 0, canvas.width, canvas.height);
         const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', .95));
         if (!blob) throw new Error('Image conversion failed');
+        if (blob.size > MAX_SIZE) throw new Error('Image size limit');
         return new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' });
       }
     } catch {

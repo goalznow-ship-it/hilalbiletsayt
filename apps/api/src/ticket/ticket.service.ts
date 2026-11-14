@@ -32,6 +32,7 @@ import * as crypto from "crypto";
 type TicketView = {
   id: string;
   code: string;
+  workNumber: string;
   examId: string;
   sessionId: string | null;
   candidateId: string | null;
@@ -54,6 +55,10 @@ type TicketView = {
   candidateFullName: string | null;
   branchName: string | null;
   branchCode: string | null;
+  branchAddress: string | null;
+  branchPhone: string | null;
+  sessionStartsAt: Date | null;
+  sessionVenue: string | null;
   sellerEmail: string | null;
   sellerFullName: string | null;
 };
@@ -61,6 +66,7 @@ type TicketView = {
 function mapTicketView(ticket: {
   id: string;
   code: string;
+  workNumber: string;
   examId: string;
   sessionId: string | null;
   candidateId: string | null;
@@ -77,18 +83,19 @@ function mapTicketView(ticket: {
   paymentMethod: string | null;
   paymentDate: Date | null;
   exam: { id: string; code: string; title: string };
-  session?: { id: string; sessionCode: string } | null;
+  session?: { id: string; sessionCode: string; startsAt: Date; venue: string | null } | null;
   candidate?: {
     id: string;
     candidate_number: string;
     full_name: string;
   } | null;
-  branch?: { id: string; name: string; code: string } | null;
+  branch?: { id: string; name: string; code: string; address: string | null; phone: string | null } | null;
   seller?: { id: string; email: string; fullName: string } | null;
 }): TicketView {
   return {
     id: ticket.id,
     code: ticket.code,
+    workNumber: ticket.workNumber,
     examId: ticket.examId,
     sessionId: ticket.sessionId,
     candidateId: ticket.candidateId,
@@ -112,6 +119,10 @@ function mapTicketView(ticket: {
     candidateFullName: ticket.candidate?.full_name ?? null,
     branchName: ticket.branch?.name ?? null,
     branchCode: ticket.branch?.code ?? null,
+    branchAddress: ticket.branch?.address ?? null,
+    branchPhone: ticket.branch?.phone ?? null,
+    sessionStartsAt: ticket.session?.startsAt ?? null,
+    sessionVenue: ticket.session?.venue ?? null,
     sellerEmail: ticket.seller?.email ?? null,
     sellerFullName: ticket.seller?.fullName ?? null,
   };
@@ -161,11 +172,11 @@ export class TicketService {
         where,
         include: {
           exam: { select: { id: true, code: true, title: true } },
-          session: { select: { id: true, sessionCode: true } },
+          session: { select: { id: true, sessionCode: true, startsAt: true, venue: true } },
           candidate: {
             select: { id: true, candidate_number: true, full_name: true },
           },
-          branch: { select: { id: true, name: true, code: true } },
+          branch: { select: { id: true, name: true, code: true, address: true, phone: true } },
           seller: { select: { id: true, email: true, fullName: true } },
         },
         orderBy: { registeredAt: "desc" },
@@ -197,11 +208,11 @@ export class TicketService {
       where: { id },
       include: {
         exam: { select: { id: true, code: true, title: true } },
-        session: { select: { id: true, sessionCode: true } },
+        session: { select: { id: true, sessionCode: true, startsAt: true, venue: true } },
         candidate: {
           select: { id: true, candidate_number: true, full_name: true },
         },
-        branch: { select: { id: true, name: true, code: true } },
+        branch: { select: { id: true, name: true, code: true, address: true, phone: true } },
         seller: { select: { id: true, email: true, fullName: true } },
       },
     });
@@ -401,11 +412,11 @@ export class TicketService {
         },
         include: {
           exam: { select: { id: true, code: true, title: true } },
-          session: { select: { id: true, sessionCode: true } },
+          session: { select: { id: true, sessionCode: true, startsAt: true, venue: true } },
           candidate: {
             select: { id: true, candidate_number: true, full_name: true },
           },
-          branch: { select: { id: true, name: true, code: true } },
+          branch: { select: { id: true, name: true, code: true, address: true, phone: true } },
           seller: { select: { id: true, email: true, fullName: true } },
         },
       });
@@ -576,11 +587,11 @@ export class TicketService {
       where: { id: ticketId },
       include: {
         exam: { select: { id: true, code: true, title: true } },
-        session: { select: { id: true, sessionCode: true } },
+        session: { select: { id: true, sessionCode: true, startsAt: true, venue: true } },
         candidate: {
           select: { id: true, candidate_number: true, full_name: true },
         },
-        branch: { select: { id: true, name: true, code: true } },
+        branch: { select: { id: true, name: true, code: true, address: true, phone: true } },
         seller: { select: { id: true, email: true, fullName: true } },
       },
     });
@@ -636,11 +647,11 @@ export class TicketService {
         where: { id: ticketId },
         include: {
           exam: { select: { id: true, code: true, title: true } },
-          session: { select: { id: true, sessionCode: true } },
+          session: { select: { id: true, sessionCode: true, startsAt: true, venue: true } },
           candidate: {
             select: { id: true, candidate_number: true, full_name: true },
           },
-          branch: { select: { id: true, name: true, code: true } },
+          branch: { select: { id: true, name: true, code: true, address: true, phone: true } },
           seller: { select: { id: true, email: true, fullName: true } },
         },
       });
@@ -750,11 +761,11 @@ export class TicketService {
       where: { code },
       include: {
         exam: { select: { id: true, code: true, title: true } },
-        session: { select: { id: true, sessionCode: true } },
+        session: { select: { id: true, sessionCode: true, startsAt: true, venue: true } },
         candidate: {
           select: { id: true, candidate_number: true, full_name: true },
         },
-        branch: { select: { id: true, name: true, code: true } },
+        branch: { select: { id: true, name: true, code: true, address: true, phone: true } },
         seller: { select: { id: true, email: true, fullName: true } },
       },
     });

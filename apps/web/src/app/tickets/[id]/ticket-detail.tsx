@@ -1,65 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
-import QRCode from "react-qr-code";
 import { useSession } from "@/components/session-provider";
-import { formatAzn } from "@/lib/money";
-import { Card } from "@/components/ui/card";
+import { ExamTicket, type ExamTicketData } from "@/components/exam-ticket";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Printer } from "lucide-react";
 
-type Ticket = {
-  id: string;
-  code: string;
-  qrCode: string | null;
-  price: number;
-  status: string;
-  paymentStatus: string;
-  paymentMethod: string | null;
-  registeredAt: string;
-  usedAt: string | null;
-  examCode: string;
-  examTitle: string;
-  sessionCode: string | null;
-  candidateNumber: string | null;
-  candidateFullName: string | null;
-  branchName: string | null;
-  sellerFullName: string | null;
-};
-
-const TICKET_STATUS_LABELS: Record<string, string> = {
-  ACTIVE: "Aktiv",
-  USED: "İstifadə edilib",
-  CANCELLED: "Ləğv edilib",
-};
-
-const PAYMENT_STATUS_LABELS: Record<string, string> = {
-  PENDING: "Ödəniş gözlənilir",
-  PAID: "Ödənilib",
-  REFUNDED: "Geri qaytarılıb",
-};
-
-const PAYMENT_METHOD_LABELS: Record<string, string> = {
-  CASH: "Nağd",
-  CARD: "Kart",
-  BANK_TRANSFER: "Bank köçürməsi",
-};
-
-function formatDateTime(value?: string | null) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("az-AZ", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+type Ticket = ExamTicketData & { id: string; qrCode: string | null };
 
 export default function TicketDetail({ ticketId }: { ticketId: string }) {
   const { user, initializing, request } = useSession();
@@ -175,127 +124,7 @@ export default function TicketDetail({ ticketId }: { ticketId: string }) {
       </div>
 
       <div className="container mx-auto px-4 pb-12">
-        <Card className="print-ticket mx-auto w-full max-w-2xl overflow-hidden border-border">
-          <div className="flex items-center justify-between gap-4 border-b border-border bg-primary/5 px-6 py-5">
-            <div className="flex items-center gap-3">
-              <Image
-                src="/branding/hilal-logo.png"
-                alt="Hilal Kursları"
-                width={48}
-                height={48}
-              />
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-                  Hilal Bilet
-                </p>
-                <p className="text-caption text-muted-foreground">
-                  Rəsmi imtahan bileti
-                </p>
-              </div>
-            </div>
-            <span className="rounded border border-border bg-background px-3 py-1 text-xs font-medium">
-              {TICKET_STATUS_LABELS[ticket.status] ?? ticket.status}
-            </span>
-          </div>
-
-          <div className="grid gap-6 px-6 py-6 sm:grid-cols-[1fr_auto]">
-            <div className="space-y-4">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  İmtahan
-                </p>
-                <p className="text-lg font-medium">
-                  {ticket.examCode} — {ticket.examTitle}
-                </p>
-              </div>
-
-              <div className="grid gap-3 text-sm sm:grid-cols-2">
-                <div>
-                  <p className="text-xs text-muted-foreground">Sessiya</p>
-                  <p className="font-medium">{ticket.sessionCode ?? "—"}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Bilet kodu</p>
-                  <p className="font-mono font-medium">{ticket.code}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Namizəd</p>
-                  <p className="font-medium">
-                    {ticket.candidateFullName ?? "—"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    Namizəd nömrəsi
-                  </p>
-                  <p className="font-medium">
-                    {ticket.candidateNumber ?? "—"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Filial</p>
-                  <p className="font-medium">{ticket.branchName ?? "—"}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Satış vaxtı</p>
-                  <p className="font-medium">
-                    {formatDateTime(ticket.registeredAt)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-3 border-t border-border pt-4 text-sm sm:grid-cols-2">
-                <div>
-                  <p className="text-xs text-muted-foreground">Qiymət</p>
-                  <p className="text-lg font-medium">{formatAzn(ticket.price)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    Ödəniş statusu
-                  </p>
-                  <p className="font-medium">
-                    {PAYMENT_STATUS_LABELS[ticket.paymentStatus] ??
-                      ticket.paymentStatus}
-                  </p>
-                  {ticket.paymentMethod && (
-                    <p className="text-xs text-muted-foreground">
-                      {PAYMENT_METHOD_LABELS[ticket.paymentMethod] ??
-                        ticket.paymentMethod}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {ticket.usedAt && (
-                <p className="text-xs text-muted-foreground">
-                  İstifadə edilib: {formatDateTime(ticket.usedAt)}
-                </p>
-              )}
-            </div>
-
-            <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-border p-4">
-              {verifyUrl ? (
-                <QRCode value={verifyUrl} size={148} />
-              ) : (
-                <p className="text-xs text-muted-foreground">QR yoxdur</p>
-              )}
-              <p className="text-center text-[10px] leading-tight text-muted-foreground">
-                Biletin həqiqiliyini
-                <br />
-                skan edərək yoxlayın
-              </p>
-            </div>
-          </div>
-
-          <div className="border-t border-border bg-muted/30 px-6 py-4">
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              Bu bilet yalnız göstərilən namizəd üçün etibarlıdır. Ödəniş
-              kassada təsdiqlənmədikcə “ödəniş gözlənilir” statusunda qalır.
-              Biletin surətinin çıxarılması və ya başqasına verilməsi
-              qadağandır.
-            </p>
-          </div>
-        </Card>
+        <ExamTicket ticket={ticket} verifyUrl={verifyUrl} />
       </div>
     </div>
   );
