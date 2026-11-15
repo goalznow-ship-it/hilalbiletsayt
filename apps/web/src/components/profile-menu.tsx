@@ -1,7 +1,7 @@
 "use client";
 
 import { Menu } from "@base-ui/react/menu";
-import { ChevronDown, LogOut } from "lucide-react";
+import { ChevronDown, LogOut, Settings2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/components/session-provider";
@@ -49,6 +49,9 @@ export function ProfileMenu() {
               <span>{user.email}</span>
               <span>{roleLabels[user.role ?? ""] ?? "İstifadəçi"}</span>
             </div>
+            <Menu.Item className="profile-menu-item" onClick={() => router.push("/dashboard/settings")}>
+              <Settings2 size={16} aria-hidden="true" /> Tənzimləmələr və şifrə
+            </Menu.Item>
             <Menu.Item
               className="profile-menu-item"
               onClick={() => {

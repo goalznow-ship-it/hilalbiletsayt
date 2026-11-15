@@ -1,15 +1,39 @@
-import { Injectable, UnauthorizedException, ForbiddenException } from "@nestjs/common";
+import { Injectable, UnauthorizedException, ForbiddenException, BadRequestException, ConflictException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../prisma/prisma.service";
 import * as argon2 from "argon2";
 import { effectiveAssignments } from "./authorization";
+import { AuditService } from "../audit/audit.service";
+import { changePasswordSchema } from "./change-password.dto";
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private audit: AuditService,
   ) {}
+
+  async changePassword(userId: string, input: unknown) {
+    const parsed = changePasswordSchema.safeParse(input);
+    if (!parsed.success) throw new BadRequestException("Hazırkı şifrəni və ondan fərqli, 12–128 simvolluq yeni şifrəni daxil edin.");
+    const user = await this.prisma.user.findUnique({ where: { id: userId },
+      select: { id: true, passwordHash: true, tokenVersion: true, isActive: true } });
+    if (!user?.isActive) throw new UnauthorizedException("Yenidən daxil olun.");
+    if (!await argon2.verify(user.passwordHash, parsed.data.currentPassword))
+      throw new BadRequestException("Hazırkı şifrə düzgün deyil.");
+    const passwordHash = await argon2.hash(parsed.data.newPassword);
+    return this.prisma.$transaction(async tx => {
+      // Compare the verified credential so concurrent resets cannot overwrite each other.
+      const updated = await tx.user.updateMany({
+        where: { id: userId, isActive: true, passwordHash: user.passwordHash, tokenVersion: user.tokenVersion },
+        data: { passwordHash, tokenVersion: { increment: 1 } },
+      });
+      if (!updated.count) throw new ConflictException("Hesab məlumatları dəyişib. Yenidən daxil olun.");
+      await this.audit.log("PASSWORD_CHANGED", userId, "User", userId, { sessionsRevoked: true }, tx);
+      return { changed: true };
+    });
+  }
 
   async validateUser(email: string, password: string): Promise<any> {
     const user = await this.prisma.user.findFirst({

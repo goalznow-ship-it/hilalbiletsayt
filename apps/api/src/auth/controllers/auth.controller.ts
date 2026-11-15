@@ -6,11 +6,21 @@ import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Public } from "../decorators/public.decorator";
 import { JwtAuthGuard } from "../guards/jwt-auth.guard";
 import { LoginDto } from "../login.dto";
+import { CurrentUser } from "../decorators/current-user.decorator";
+import { AuthenticatedUser } from "../authorization";
 
 @ApiTags("auth")
 @Controller("auth")
 export class AuthController {
   constructor(private authService: AuthService) {}
+
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post("password")
+  @ApiOperation({ summary: "Change own password and revoke all sessions" })
+  changePassword(@Body() input: unknown, @CurrentUser() user: AuthenticatedUser) {
+    return this.authService.changePassword(user.userId, input);
+  }
 
   // Brute-force protection per client address; raise only for test stacks.
   @Throttle({ default: { limit: Number(process.env.AUTH_LOGIN_RATE_LIMIT_PER_MINUTE ?? 10) || 10, ttl: 60000 } })

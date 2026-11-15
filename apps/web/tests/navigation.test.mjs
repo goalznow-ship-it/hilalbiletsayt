@@ -27,6 +27,11 @@ test("branch managers can read staff but cannot enter central administration", (
   const manager = hrefs(["BRANCH_MANAGER"]);
   for (const href of ["/dashboard/users", "/dashboard/omr", "/dashboard/tickets"])
     assert.ok(manager.includes(href), href);
-  for (const href of ["/dashboard/branches", "/dashboard/questions", "/dashboard/results", "/dashboard/settings"])
+  for (const href of ["/dashboard/branches", "/dashboard/questions", "/dashboard/results"])
     assert.ok(!manager.includes(href), href);
+});
+
+test("every staff role can reach their own account settings", () => {
+  for (const role of ["SUPER_ADMIN", "CENTRAL_ADMIN", "BRANCH_MANAGER", "SELLER", "OMR_OPERATOR"])
+    assert.ok(hrefs([role]).includes("/dashboard/settings"), role);
 });
