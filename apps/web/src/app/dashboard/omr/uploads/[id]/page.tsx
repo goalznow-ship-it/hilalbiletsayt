@@ -30,8 +30,11 @@ const reviewReasons: Record<string, string> = {
   ALIGNMENT_UNCERTAIN: "Kartın bucağı və ya nişanları dəqiq tanınmadı. Telefonu kartlara paralel tutun.",
   ALIGNMENT_MARKERS_MISSING_OR_DUPLICATED: "Dörd künc nişanı tam görünmür. Vərəqi yenidən çəkin.",
   PAGE_CROPPED: "Vərəqin kənarları kəsilib. Bütün vərəqi göstərin.",
+  CUSTOM_TEMPLATE_NOT_MATCHED: "Kart seçilmiş modelə uyğunlaşdırılmadı. Düzgün modeli seçin və kartı bütöv, aydın çəkin.",
+  CUSTOM_GRID_INVALID: "Modelin sahələri kartla uyğun deyil. Administrator modeldəki dairələri yoxlamalıdır.",
+  TEMPLATE_NOT_BLANK_OR_GRID_MISALIGNED: "Modelin boş nümunəsi və ya dairə mövqeləri uyğun deyil. Modeli yenidən tanıdın.",
   IDENTIFIER_REQUIRED: "QR kod oxunmayıb. QR aydın görünəcək şəkildə yenidən çəkin.",
-  IDENTITY_NOT_AUTHORIZED_FOR_EXAM: "QR kod bu imtahan və filial üçün təsdiqlənməyib.",
+  IDENTITY_NOT_AUTHORIZED_FOR_EXAM: "Kartın iş nömrəsi və ya QR-si bu imtahan və filial üçün təsdiqlənməyib.",
   TICKET_IDENTITY_OR_STATUS_CHANGED: "Biletin namizəd və ya ödəniş məlumatlarını administrator yoxlamalıdır.",
   TEMPLATE_KEY_MISMATCH: "Vərəqin sual sayı və cavab açarı uyğun deyil.",
   RECOGNITION_REVIEW: "Skan orijinal vərəqlə müqayisə olunmalıdır.",
@@ -180,7 +183,7 @@ export default function OmrUploadStatus() {
               <p>İş nömrəsi: <strong>{page.candidate.workNumber ?? "—"}</strong></p>
               <p>Qeydiyyat kodu: <strong>{page.candidate.code}</strong> · Bilet: <strong>{page.candidate.ticketCode}</strong></p>
             </div>}
-            <p className="text-xs text-slate-500">{page.sheetId ? "QR/bilet identifikatoru uyğunlaşdırılıb" : "Təsdiqlənmiş bilet bağlantısı yoxdur"}</p>
+            <p className="text-xs text-slate-500">{page.sheetId ? "Kart biletlə uyğunlaşdırılıb" : "Təsdiqlənmiş bilet bağlantısı yoxdur"}</p>
           </div>
           {typeof data.score === "number" && <span className="font-semibold text-[#7A0014]">{data.score} / {data.maximumScore ?? "?"} bal</span>}
         </header>
@@ -188,7 +191,7 @@ export default function OmrUploadStatus() {
           {data.reviewFlags.map(flag => <li key={flag}>{reviewReasons[flag] ?? "Skan orijinal vərəqlə müqayisə olunmalıdır."}</li>)}
         </ul>}
         {page.status === "REVIEW" && !page.sheetId && <p className="text-sm text-red-700">
-          QR və bilet məlumatı etibarlı uyğunlaşdırılmadığı üçün cavabları burada təsdiqləmək olmaz. Yenidən skan və şəxsiyyət yoxlaması tələb olunur.
+          Kart və bilet məlumatı etibarlı uyğunlaşdırılmadığı üçün cavabları burada təsdiqləmək olmaz. Yenidən skan və şəxsiyyət yoxlaması tələb olunur.
         </p>}
         {data.manualReview && <p className="text-xs text-green-700">Manual yoxlanıb: {data.manualReview.reviewedAt}</p>}
         <div className="overflow-x-auto">

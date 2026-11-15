@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 import { useSession } from "@/components/session-provider";
 import { OmrCamera, type CaptureSource } from "@/components/omr-camera";
 import { prepareOmrFile, omrUploadFeedback } from "@/lib/omr-scan";
+import { type CardModel } from "@/lib/omr-template";
 
 type Exam = {
   id: string;
@@ -60,6 +61,11 @@ function OmrUploadForm() {
   const [examId, setExamId] = useState(() => UUID_RE.test(params.get("examId") ?? "") ? params.get("examId")! : "");
   const [file, setFile] = useState<File | null>(null);
   const [multipleSheets, setMultipleSheets] = useState(false);
+  const [models, setModels] = useState<CardModel[]>([]);
+  const [modelId, setModelId] = useState("choose");
+  const [modelsReady, setModelsReady] = useState(false);
+  const customTemplate = modelId !== "standard" && modelId !== "choose";
+  const requestedModel = params.get("templateId");
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -76,6 +82,19 @@ function OmrUploadForm() {
   const processedIds = useRef(new Set<string>());
 
   useEffect(() => () => { if (previewUrl.current) URL.revokeObjectURL(previewUrl.current); }, []);
+
+  useEffect(() => {
+    if (!user || !examId) return;
+    let active = true;
+    request<CardModel[]>(`/omr/templates?examId=${examId}`).then(data => {
+      if (!active) return;
+      const items = Array.isArray(data) ? data : [];
+      setModels(items);
+      setModelId(items.some(item => item.id === requestedModel) ? requestedModel! : items.length ? "choose" : "standard");
+      setModelsReady(true);
+    }).catch(err => { if (active) setError(err instanceof Error ? err.message : "Kart modelləri alınmadı."); });
+    return () => { active = false; };
+  }, [request, user, examId, requestedModel]);
 
   function selectFile(next: File | null, source: CaptureSource = "manual") {
     if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
@@ -141,6 +160,7 @@ function OmrUploadForm() {
       setError("Cavab kartını çəkin və ya PDF/şəkil seçin.");
       return;
     }
+    if (!modelsReady || modelId === "choose") { setError("Oxunacaq cavab kartının modelini seçin."); return; }
     submitting.current = true;
     setUploading(true);
     setLastUploadId("");
@@ -152,7 +172,7 @@ function OmrUploadForm() {
       // Əlavə form field göndərmirik.
       body.append("files", prepared, prepared.name);
       const response = await request<unknown>(
-        `/omr/exams/${examId.trim()}/uploads`,
+        `/omr/exams/${examId.trim()}/uploads${customTemplate ? `?templateId=${modelId}` : ""}`,
         {
           method: "POST",
           body,
@@ -172,7 +192,7 @@ function OmrUploadForm() {
       else if (restricted && first.status === "REVIEW") {
         setNotice("reviewReason" in first && first.reviewReason === "SHEET_ALREADY_PROCESSED"
           ? "Bu cavab kartı artıq emal edilib. Təkrar skan əvvəlki nəticəni dəyişmir."
-          : "Kartın QR və filial əlaqəsi təsdiqlənmədi. QR və dörd künc tam görünəcək şəkildə yenidən çəkin. Detalları mərkəzi administrator yoxlaya bilər.");
+          : "Kartın iş nömrəsi və filial əlaqəsi təsdiqlənmədi. Kart bütöv və aydın görünəcək şəkildə yenidən çəkin. Detalları mərkəzi administrator yoxlaya bilər.");
       } else setNotice(restricted && feedback.kind === "pending"
         ? "Skan hələ emal olunur. Bir qədər sonra eyni faylla yenidən yoxlayın."
         : feedback.message + ("pages" in first && Array.isArray(first.pages)
@@ -234,7 +254,7 @@ function OmrUploadForm() {
             <select
               id="omr-exam"
               value={examId}
-              onChange={(e) => { setExamId(e.target.value); selectFile(null); setResumeCamera(false); processedIds.current.clear(); setProcessed(0); }}
+              onChange={(e) => { setExamId(e.target.value); setModelsReady(false); setModels([]); setModelId("choose"); selectFile(null); setResumeCamera(false); processedIds.current.clear(); setProcessed(0); }}
               disabled={loading || !user || uploading}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-3 text-sm outline-none focus:border-[#7A0014]"
             >
@@ -256,12 +276,23 @@ function OmrUploadForm() {
           </div>
 
           {!examId && <p className="rounded-lg bg-muted p-4 text-sm text-muted-foreground">Başlamaq üçün imtahanı seçin. Kamera və fayl yükləmə bundan sonra açılacaq.</p>}
+          {examId && <div className="space-y-2">
+            <label htmlFor="omr-model" className="block text-sm font-medium">Cavab kartının modeli</label>
+            <select id="omr-model" value={modelId} disabled={uploading || !modelsReady} className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm"
+              onChange={event => { setModelId(event.target.value); selectFile(null); setResumeCamera(false); }}>
+              <option value="choose">{modelsReady ? "Model seçin" : "Modellər yüklənir…"}</option>
+              {models.map(model => <option key={model.id} value={model.id}>{model.name} · {model.answerKey.variant} · v{model.answerKey.version}</option>)}
+              <option value="standard">Sistemdə yaradılmış QR-li kart</option>
+            </select>
+            <Link href="/dashboard/omr/templates" className="inline-flex min-h-11 items-center text-sm font-semibold text-primary underline">Öz boş kartımı model kimi əlavə et</Link>
+            {customTemplate && <p className="text-sm text-slate-600">Bu modelin cavab açarı tətbiq olunur. Şagird biletdəki 8 rəqəmli iş nömrəsi ilə tapılır. QR tələb olunmur.</p>}
+          </div>}
           <label className="flex min-h-11 items-center gap-3 text-sm font-medium">
             <input type="checkbox" checked={multipleSheets} disabled={uploading || !!file}
               onChange={event => setMultipleSheets(event.target.checked)} className="size-5 accent-primary" />
             Bir fotoda bir neçə kart çəkirəm
           </label>
-          {UPLOAD_ENABLED && user && examId && !uploading && !file && <OmrCamera key={`${examId}:${multipleSheets}`} multipleSheets={multipleSheets} autoStart={resumeCamera} onCapture={(next, source) => selectFile(next, source)} />}
+          {UPLOAD_ENABLED && user && examId && modelsReady && modelId !== "choose" && !uploading && !file && <OmrCamera key={`${examId}:${modelId}:${multipleSheets}`} customTemplate={customTemplate} multipleSheets={multipleSheets} autoStart={resumeCamera} onCapture={(next, source) => selectFile(next, source)} />}
 
           <div className="space-y-2">
             <label
@@ -275,7 +306,7 @@ function OmrUploadForm() {
               id="omr-file"
               type="file"
               accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-              disabled={uploading || !user || !UPLOAD_ENABLED || !examId}
+              disabled={uploading || !user || !UPLOAD_ENABLED || !examId || !modelsReady || modelId === "choose"}
               onChange={(e) => {
                 const next = e.currentTarget.files?.[0];
                 e.currentTarget.value = "";
@@ -286,8 +317,8 @@ function OmrUploadForm() {
 
             <p className="text-xs text-slate-500">
               PDF, JPEG və PNG: maksimum 25 MB. Bir fotoda maksimum 20 kart, PDF-də maksimum 10 səhifə və ümumilikdə 100 kart.
-              20 meqapikselə qədər keyfiyyət saxlanılır. Hər kartın QR kodu və dörd küncü görünməlidir; kartları üst-üstə qoymayın.
-              Kiçik və aydın oxunmayan kartları daha yaxından çəkin. Yalnız sistemdə yaradılmış QR-li kartlar tanınır.
+              20 meqapikselə qədər keyfiyyət saxlanılır. Kartlar bütöv görünməlidir; üst-üstə qoymayın.
+              Kiçik və aydın oxunmayan kartları daha yaxından çəkin. {customTemplate ? "Bütün kartlar seçilən modelə uyğun olmalıdır. Oxunan kart sayını yoxlayın; çatışmayanları ayrıca skan edin." : "Sistem kartında QR və dörd künc nişanı tam görünməlidir."}
             </p>
             <Link href="/dashboard/omr/sheets" className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline">Tanınan kart nümunəsi və PDF şablonu</Link>
           </div>
@@ -342,6 +373,7 @@ function OmrUploadForm() {
               !user ||
               !examId ||
               !file ||
+              !modelsReady || modelId === "choose" ||
               uploading || (noticeKind === "success" || noticeKind === "review") && !!notice
             }
             className="rounded-lg bg-[#7A0014] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#59000f] disabled:cursor-not-allowed disabled:opacity-40"

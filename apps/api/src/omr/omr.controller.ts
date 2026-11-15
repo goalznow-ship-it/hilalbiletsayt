@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Header, Param, ParseUUIDPipe, Patch, Post, Query, StreamableFile, UploadedFiles, UseGuards, UseInterceptors } from "@nestjs/common";
-import { FilesInterceptor } from "@nestjs/platform-express";
+import { BadRequestException, Body, Controller, Get, Header, Param, ParseUUIDPipe, Patch, Post, Query, StreamableFile, UploadedFile, UploadedFiles, UseGuards, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor, FilesInterceptor } from "@nestjs/platform-express";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { Roles, RolesGuard } from "../auth/guards/roles.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -11,6 +11,26 @@ import { OmrService, ScanFile } from "./omr.service";
 @Roles(["SUPER_ADMIN", "CENTRAL_ADMIN", "BRANCH_MANAGER", "OMR_OPERATOR"])
 export class OmrController {
   constructor(private readonly omr: OmrService) {}
+  @Get("templates")
+  templates(@Query("examId", ParseUUIDPipe) examId: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.omr.listTemplates(examId, user);
+  }
+
+  @Post("templates/preview")
+  @Roles(["SUPER_ADMIN", "CENTRAL_ADMIN"])
+  @UseInterceptors(FileInterceptor("file", { limits: { files: 1, fields: 0, parts: 1, fileSize: 25 * 1024 * 1024 } }))
+  previewTemplate(@UploadedFile() file: ScanFile, @CurrentUser() user: AuthenticatedUser) {
+    return this.omr.previewTemplate(file, user);
+  }
+
+  @Post("templates")
+  @Roles(["SUPER_ADMIN", "CENTRAL_ADMIN"])
+  @UseInterceptors(FileInterceptor("file", { limits: { files: 1, fields: 1, parts: 2, fieldSize: 32000, fileSize: 25 * 1024 * 1024 } }))
+  createTemplate(@UploadedFile() file: ScanFile, @Body("config") config: string, @CurrentUser() user: AuthenticatedUser) {
+    let input: unknown;
+    try { input = JSON.parse(config); } catch { throw new BadRequestException("Model məlumatları düzgün deyil."); }
+    return this.omr.createTemplate(file, input, user);
+  }
   @Post("keys")
   @Roles(["SUPER_ADMIN", "CENTRAL_ADMIN"])
   createKey(@Body() data: unknown, @CurrentUser() user: AuthenticatedUser) { return this.omr.createKey(data, user); }
@@ -67,8 +87,8 @@ export class OmrController {
 
   @Post("exams/:examId/uploads")
   @UseInterceptors(FilesInterceptor("files", 4, { limits: { files: 4, fields: 0, parts: 4, fileSize: 25 * 1024 * 1024 } }))
-  upload(@Param("examId", ParseUUIDPipe) examId: string, @UploadedFiles() files: ScanFile[], @CurrentUser() user: AuthenticatedUser) {
-    return this.omr.upload(examId, files, user);
+  upload(@Param("examId", ParseUUIDPipe) examId: string, @UploadedFiles() files: ScanFile[], @CurrentUser() user: AuthenticatedUser, @Query("templateId") templateId?: string) {
+    return this.omr.upload(examId, files, user, templateId);
   }
 
   @Get("uploads/:id")

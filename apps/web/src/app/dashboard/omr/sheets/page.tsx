@@ -95,6 +95,11 @@ export default function SheetsPage() {
 
       <h1 className="text-2xl font-bold">Cavab vərəqi yarat</h1>
 
+      <Link href="/dashboard/omr/templates" className="block rounded-xl border border-primary bg-white p-5 text-primary">
+        <span className="font-semibold">Öz cavab kartımı əlavə et</span>
+        <span className="mt-2 block text-sm">Hazır kartınız varsa, boş skanını yükləyib model kimi saxlayın. Standart kartdan istifadə etmək məcburi deyil.</span>
+      </Link>
+
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="text-lg font-semibold">Skanın tanıdığı cavab kartı</h2>
         <p className="text-sm text-slate-600">A4 kartda dörd künc nişanı, QR, şagirdin adı, iş nömrəsi, qeydiyyat kodu və bilet nömrəsi olur.

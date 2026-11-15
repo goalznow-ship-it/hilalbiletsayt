@@ -9,6 +9,8 @@ export default function OmrPage() {
   const router = useRouter();
 
   const links = [
+    { href: "/dashboard/omr/templates", name: "Öz cavab kartımı əlavə et",
+      desc: "İlk boş kartın skanını yüklə, oxunacaq sahələri tanıt və model kimi saxla." },
     { href: "/dashboard/omr/upload", name: "Skan yüklə",
       desc: "Telefon kamerası ilə çək və ya PDF/JPEG/PNG yüklə." },
     { href: "/dashboard/omr/sheets", name: "Cavab vərəqi yarat",
@@ -26,7 +28,7 @@ export default function OmrPage() {
       <header>
         <h1 className="text-2xl font-bold">OMR idarəetməsi</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Cavab açarını hazırlayın, vərəqləri çap edin, telefonla skan edib nəticələri açıqlayın.
+          Cavab açarını hazırlayın, öz kartınızı model kimi əlavə edin, telefonla skan edib nəticələri açıqlayın.
         </p>
       </header>
 

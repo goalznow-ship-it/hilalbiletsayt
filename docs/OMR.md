@@ -138,3 +138,45 @@ Deploy API and worker together: the updated worker recognizes v2 and provides
 the Unicode `/api/omr/report` PDF endpoint. The public results lookup still requires
 the ticket reference and private candidate code; a predictable work number alone
 does not grant access to results.
+## User-supplied answer cards
+
+In **OMR → Öz cavab kartımı əlavə et**, a central administrator selects the exam
+and immutable answer key, then uploads one blank PDF/JPEG/PNG page. The preview
+is normalized to at most 2000 pixels per side. Upload a straight, tightly cropped
+scan; the blank page itself is the reference, so no Hilal QR or ArUco markers are
+required. Names written by hand are not OCR'd.
+
+Calibrate each evenly spaced answer block in question order: select the centers
+of its first A bubble and last answer bubble, set its row count and bubble radius,
+and verify the overlay. Add the eight-column work-number grid (digits 0–9 from
+top to bottom). Every question must match the selected key's count and choices.
+The worker checks blank interiors, printed rings, bounds and overlapping grids
+before saving. Unsupported irregular layouts need a separate calibration method;
+they must not be represented by an approximate uniform grid.
+
+The saved model appears in the scan form. Its sample, calibration and key are
+immutable. A different layout/key requires a new model. Existing standard cards
+continue to use their original marker/QR reader. On phones, custom cards use the
+camera shutter or gallery; automatic corner-triggered capture is for standard
+cards only.
+
+Custom scans register against the blank image using feature matching and a
+perspective transform, including rotation and repeated cards in a single image.
+The same 20-card/photo, 100-card/document, 20 MP and worker resource limits apply.
+Compare the reported card count with the photo: covered, very small or unrelated
+cards may not yield enough features to be located. Rescan missing cards closer.
+Synthetic regression tests include 12 custom cards in a single photo under the
+actual worker subprocess limits; physical device/paper calibration is still needed.
+
+A confidently read eight-digit work number resolves a paid/live ticket in the
+selected exam and an authorized branch. Candidate name comes from that ticket.
+Missing/ambiguous numbers, unauthorized identities, changed tickets and conflicting
+previously issued models stay in REVIEW without exposing pupil data. Duplicate
+scans preserve existing results. Retries are scoped to the selected model as well
+as uploader/exam/file. Human answer review never changes the recognized identity.
+
+Deploy migration `20261115000100_custom_omr_templates` before the updated API and
+deploy the worker and frontend together. Models are held in the database (up to
+3 MB each, 50 per exam, 200 overall); scan originals still use `OMR_STORAGE_DIR`.
+Model creation is central-admin-only and audited. The database migration adds
+tables/columns without replacing existing sheets or results.

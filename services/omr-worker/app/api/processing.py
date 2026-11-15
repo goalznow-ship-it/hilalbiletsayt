@@ -1,9 +1,10 @@
 from typing import Annotated, Literal
-from fastapi import APIRouter, File, UploadFile, HTTPException
+from fastapi import APIRouter, File, Form, UploadFile, HTTPException
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, ValidationError
 from app.omr.supervisor import run_bounded, WorkerBusy
+from app.omr.custom_template import Layout
 
 router = APIRouter(prefix="/omr", tags=["omr"])
 
@@ -43,7 +44,10 @@ async def generate_sheet(request: SheetRequest):
 
 
 @router.post("/process")
-async def process_files(files: Annotated[list[UploadFile], File()]):
+async def process_files(files: Annotated[list[UploadFile], File()],
+                        sample: Annotated[UploadFile | None, File()] = None,
+                        layout: Annotated[str | None, Form(max_length=32000)] = None,
+                        version: Annotated[str | None, Form(pattern=r"^custom:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$")] = None):
     try:
         if not 1 <= len(files) <= 4:
             raise HTTPException(413, "BATCH_FILE_LIMIT")
@@ -54,10 +58,36 @@ async def process_files(files: Annotated[list[UploadFile], File()]):
             if len(data) > 25 * 1024 * 1024 or size > 50 * 1024 * 1024:
                 raise HTTPException(413, "UPLOAD_SIZE_LIMIT")
             batch.append((data, file.filename or "", file.content_type or ""))
+        if sample is not None or layout is not None or version is not None:
+            if sample is None or layout is None or version is None:
+                raise HTTPException(422, "CUSTOM_TEMPLATE_REQUIRED")
+            model = Layout.model_validate_json(layout)
+            reference = await sample.read(3 * 1024 * 1024 + 1)
+            if len(reference) > 3 * 1024 * 1024:
+                raise HTTPException(413, "TEMPLATE_SIZE_LIMIT")
+            return {"files": await execute("custom", (batch, reference, model.model_dump(), version))}
         return {"files": await execute("process", batch)}
+    except ValidationError as exc:
+        raise HTTPException(422, "INVALID_TEMPLATE_LAYOUT") from exc
     finally:
         for file in files:
             await file.close()
+        if sample is not None:
+            await sample.close()
+
+
+@router.post("/templates")
+async def prepare_model(file: Annotated[UploadFile, File()], layout: Annotated[str | None, Form(max_length=32000)] = None):
+    try:
+        data = await file.read(25 * 1024 * 1024 + 1)
+        if len(data) > 25 * 1024 * 1024:
+            raise HTTPException(413, "UPLOAD_SIZE_LIMIT")
+        model = Layout.model_validate_json(layout).model_dump() if layout is not None else None
+        return await execute("template", ((data, file.filename or "", file.content_type or ""), model))
+    except ValidationError as exc:
+        raise HTTPException(422, "INVALID_TEMPLATE_LAYOUT") from exc
+    finally:
+        await file.close()
 
 
 @router.post("/report")

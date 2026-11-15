@@ -259,6 +259,7 @@ model OmrAnswerKey {
   createdAt   DateTime @default(now())
   exam        Exam     @relation(fields: [examId], references: [id], onDelete: Restrict)
   sheets      OmrSheet[]
+  templates   OmrTemplate[]
   @@unique([examId, variant, version])
   @@map("omr_answer_keys")
 }
@@ -280,6 +281,21 @@ model OmrSheet {
   @@map("omr_sheets")
 }
 
+/// Immutable calibration of a user-supplied blank answer card and its answer key.
+model OmrTemplate {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  answerKeyId String   @db.Uuid
+  layout      Json
+  sample      Bytes
+  createdBy   String   @db.Uuid
+  createdAt   DateTime @default(now())
+  answerKey   OmrAnswerKey @relation(fields: [answerKeyId], references: [id], onDelete: Restrict)
+  uploads     OmrUpload[]
+  @@index([answerKeyId])
+  @@map("omr_templates")
+}
+
 model OmrUpload {
   id          String   @id @default(uuid()) @db.Uuid
   examId      String   @db.Uuid
@@ -287,6 +303,7 @@ model OmrUpload {
   sha256      String
   size        Int
   mime        String
+  templateId  String?  @db.Uuid
   status      String   @default("PENDING")
   attemptId   String?  @db.Uuid
   error       String?
@@ -294,6 +311,7 @@ model OmrUpload {
   updatedAt   DateTime @default(now()) @updatedAt
   exam        Exam     @relation(fields: [examId], references: [id], onDelete: Restrict)
   pages       OmrPage[]
+  template    OmrTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
   @@unique([examId, createdBy, sha256])
   @@index([createdBy, createdAt])
   @@map("omr_uploads")

@@ -51,7 +51,7 @@ export const reviewSchema = z.object({
 
 export const pageSchema = z.object({
   pageIndex: z.number().int().min(0).max(99), engineVersion: z.literal("1.0.0"),
-  templateVersion: z.enum(["hilal-a4-v1", "hilal-a4-v2"]), sheetToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable(),
+  templateVersion: z.union([z.enum(["hilal-a4-v1", "hilal-a4-v2"]), z.string().regex(/^custom:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)]), sheetToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable(),
   workNumber: z.string().regex(/^[0-9]{8}$/).nullable().optional(),
   questionCount: z.number().int().min(1).max(150).optional(), choiceCount: z.number().int().min(2).max(5).optional(),
   answers: z.array(answerSchema).max(150), confidence: z.number().min(0).max(1),

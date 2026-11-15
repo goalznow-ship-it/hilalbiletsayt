@@ -2,12 +2,14 @@ import { BadRequestException, ConflictException, ForbiddenException, HttpExcepti
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
-import { Prisma } from "@prisma/client";
+import { Prisma, type OmrTemplate } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { AuthenticatedUser, isCentralAdmin } from "../auth/authorization";
 import { issueSchema, keySchema, reviewSchema, pageSchema, KeyAnswer, Rules, ReadPage, scorePage, workerResultSchema } from "./omr.contract";
 import { omrXlsx } from "./omr.xlsx";
+import { createTemplateSchema, templatePreviewSchema } from "./omr.template";
+import { z } from "zod";
 
 export type ScanFile = { buffer: Buffer; originalname: string; mimetype: string; size: number };
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
@@ -50,11 +52,61 @@ export class OmrService {
         method: "POST", headers: { Authorization: `Bearer ${secret}`, ...headers }, body,
         signal: AbortSignal.timeout(110_000),
       });
+      if (!response.ok && response.status === 422 && path === "templates")
+        throw new BadRequestException("Boş kart və sahələr uyğun deyil. Tək səhifə, dairələrin mərkəzləri və radiusunu yoxlayın; şəkil aydın və düz olmalıdır.");
       if (!response.ok) throw new Error("Worker rejected processing");
       return response;
-    } catch {
-      throw new ServiceUnavailableException("OMR emalı tamamlanmadı. Fayl saxlanılıb; yenidən cəhd edin.");
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throw new ServiceUnavailableException(path === "templates" ? "Kart modeli yoxlanmadı. Yenidən cəhd edin." : "OMR emalı tamamlanmadı. Fayl saxlanılıb; yenidən cəhd edin.");
     }
+  }
+
+  async listTemplates(examId: string, user: AuthenticatedUser) {
+    if (!isCentralAdmin(user) && !(user.branches ?? []).some(b => this.branchAllowed(user, b.id))) throw new ForbiddenException();
+    const templates = await this.prisma.omrTemplate.findMany({ where: { answerKey: { examId } },
+      select: { id: true, name: true, answerKeyId: true, createdAt: true,
+        answerKey: { select: { variant: true, version: true } } }, orderBy: { createdAt: "desc" }, take: 50 });
+    return templates;
+  }
+
+  async previewTemplate(file: ScanFile, user: AuthenticatedUser) {
+    if (!isCentralAdmin(user)) throw new ForbiddenException();
+    this.validateScanFiles([file]);
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array(file.buffer)], { type: file.mimetype }), `model${mimeExtensions[file.mimetype]}`);
+    return templatePreviewSchema.parse(await (await this.worker("templates", form)).json());
+  }
+
+  async createTemplate(file: ScanFile, input: unknown, user: AuthenticatedUser) {
+    if (!isCentralAdmin(user)) throw new ForbiddenException();
+    this.validateScanFiles([file]);
+    const parsed = createTemplateSchema.safeParse(input);
+    if (!parsed.success) throw new BadRequestException("Modelin adı, cavab açarı və sahələrini yoxlayın.");
+    const { name, answerKeyId, layout } = parsed.data;
+    const key = await this.prisma.omrAnswerKey.findUnique({ where: { id: answerKeyId }, include: { exam: true } });
+    if (!key) throw new NotFoundException("Cavab açarı tapılmadı.");
+    if (key.exam.resultsPublishedAt) throw new ConflictException(RESULTS_PUBLISHED);
+    if (layout.answers.reduce((n, g) => n + g.rows, 0) !== (key.answers as KeyAnswer[]).length || layout.answers[0].columns !== key.choiceCount)
+      throw new BadRequestException("Modeldəki sual və variant sayı cavab açarı ilə eyni olmalıdır.");
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array(file.buffer)], { type: file.mimetype }), `model${mimeExtensions[file.mimetype]}`);
+    form.append("layout", JSON.stringify(layout));
+    const preview = templatePreviewSchema.parse(await (await this.worker("templates", form)).json());
+    if (preview.width !== layout.width || preview.height !== layout.height) throw new BadRequestException("Modelin ölçüləri dəyişib.");
+    const sample = Buffer.from(preview.image, "base64");
+    return this.prisma.$transaction(async tx => {
+      await tx.$queryRawUnsafe("SELECT pg_advisory_xact_lock(730144)::text");
+      await assertResultsUnpublished(tx, key.examId);
+      // Samples are bounded to 3 MB by the worker; cap retained models as well.
+      if (sample.length > 3 * 1024 * 1024 || await tx.omrTemplate.count() >= 200 ||
+          await tx.omrTemplate.count({ where: { answerKey: { examId: key.examId } } }) >= 50)
+        throw new BadRequestException("Cavab kartı modellərinin saxlama limiti dolub.");
+      const template = await tx.omrTemplate.create({ data: { name, answerKeyId, layout: json(layout), sample, createdBy: user.userId },
+        select: { id: true, name: true, answerKeyId: true } });
+      await this.audit.log("OMR_TEMPLATE_CREATED", user.userId, "OmrTemplate", template.id, { answerKeyId, examId: key.examId }, tx);
+      return template;
+    });
   }
 
   async createKey(input: unknown, user: AuthenticatedUser) {
@@ -63,7 +115,7 @@ export class OmrService {
     if (!parsed.success) throw new BadRequestException("Cavab açarı və bal qaydalarını yoxlayın.");
     const data = parsed.data;
     if (data.templateVersionId)
-      throw new BadRequestException("Bu versiyada ayrıca şablon ID-si dəstəklənmir; hilal-a4-v1 istifadə olunur.");
+      throw new BadRequestException("Cavab açarını əvvəlcə saxlayın, sonra öz kartınızı əlavə edərkən həmin açarı seçin.");
     return this.prisma.$transaction(async tx => {
       await tx.$queryRawUnsafe("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))::text", `omr-key:${data.examId}:${data.variant}`);
       if (!await tx.exam.findUnique({ where: { id: data.examId }, select: { id: true } }))
@@ -120,6 +172,8 @@ export class OmrService {
     } });
     if (!sheet) throw new NotFoundException();
     this.assertBranch(user, sheet.ticket.branchId);
+    if (sheet.templateVersion.startsWith("custom:"))
+      throw new BadRequestException("Bu nəticə öz yüklədiyiniz cavab kartına aiddir; standart PDF yaradılmır.");
     if (sheet.candidateId !== sheet.ticket.candidateId || sheet.examId !== sheet.ticket.examId || sheet.branchId !== sheet.ticket.branchId || sheet.ticket.status === "CANCELLED")
       throw new ConflictException("Vərəqin bilet məlumatları dəyişib; yoxlama tələb olunur.");
     const response = await this.worker("sheets", JSON.stringify({ token: sheet.token,
@@ -289,7 +343,7 @@ export class OmrService {
       if (!initial.success) throw new ConflictException("Skan məlumatlarının formatı düzgün deyil.");
       if (sheet.templateVersion !== initial.data.templateVersion)
         throw new ConflictException("Vərəq şablonunun versiyası uyğun deyil.");
-      if (initial.data.templateVersion === "hilal-a4-v2" && initial.data.workNumber !== sheet.ticket.workNumber)
+      if (initial.data.templateVersion !== "hilal-a4-v1" && initial.data.workNumber !== sheet.ticket.workNumber)
         throw new ConflictException("Kodlanmış iş nömrəsi biletlə uyğun deyil. Kartı yenidən skan edin.");
       const answerCount = initial.data.answers.length;
       const choices = sheet.answerKey.choiceCount;
@@ -343,13 +397,9 @@ export class OmrService {
     return { buffer: await readFile(join(this.storage(), upload.id)), mime: upload.mime };
   }
 
-  async upload(examId: string, files: ScanFile[], user: AuthenticatedUser) {
-    if (!files?.length || files.length > 4 || files.reduce((sum, f) => sum + f.size, 0) > 50 * 1024 * 1024)
+  private validateScanFiles(files: ScanFile[]) {
+    if (!files?.length || files.some(f => !f) || files.length > 4 || files.reduce((sum, f) => sum + f.size, 0) > 50 * 1024 * 1024)
       throw new BadRequestException("Ən çox 4 fayl və cəmi 50 MB qəbul olunur.");
-    if (!isCentralAdmin(user) && !(user.branches ?? []).some(b => this.branchAllowed(user, b.id))) throw new ForbiddenException();
-    const exam = await this.prisma.exam.findUnique({ where: { id: examId }, select: { resultsPublishedAt: true } });
-    if (!exam) throw new NotFoundException("İmtahan tapılmadı.");
-    if (exam.resultsPublishedAt) throw new ConflictException(RESULTS_PUBLISHED);
     for (const file of files) {
       const ext = extname(file.originalname).toLowerCase();
       const expected = mimeExtensions[file.mimetype];
@@ -359,13 +409,28 @@ export class OmrService {
       if (!expected || !signature || !file.size || file.size !== file.buffer.length || file.size > 25 * 1024 * 1024 ||
           (ext !== expected && !(expected === ".jpg" && ext === ".jpeg"))) throw new BadRequestException("PDF, PNG və ya JPEG faylı tələb olunur; limit 25 MB.");
     }
+  }
+
+  async upload(examId: string, files: ScanFile[], user: AuthenticatedUser, templateId?: string) {
+    this.validateScanFiles(files);
+    if (!isCentralAdmin(user) && !(user.branches ?? []).some(b => this.branchAllowed(user, b.id))) throw new ForbiddenException();
+    const exam = await this.prisma.exam.findUnique({ where: { id: examId }, select: { resultsPublishedAt: true } });
+    if (!exam) throw new NotFoundException("İmtahan tapılmadı.");
+    if (exam.resultsPublishedAt) throw new ConflictException(RESULTS_PUBLISHED);
+    let template: OmrTemplate | undefined;
+    if (templateId !== undefined) {
+      if (!z.uuid().safeParse(templateId).success) throw new BadRequestException("Model ID-si düzgün deyil.");
+      const found = await this.prisma.omrTemplate.findFirst({ where: { id: templateId, answerKey: { examId } } });
+      if (!found) throw new BadRequestException("Model bu imtahana aid deyil.");
+      template = found;
+    }
     const results = [];
-    for (const file of files) results.push(await this.processFile(examId, file, user));
+    for (const file of files) results.push(await this.processFile(examId, file, user, template));
     return results;
   }
 
-  private async processFile(examId: string, file: ScanFile, user: AuthenticatedUser) {
-    const sha256 = createHash("sha256").update(file.buffer).digest("hex");
+  private async processFile(examId: string, file: ScanFile, user: AuthenticatedUser, template?: OmrTemplate) {
+    const sha256 = createHash("sha256").update(template?.id ?? "").update(file.buffer).digest("hex");
     const upload = await this.prisma.$transaction(async tx => {
       await tx.$queryRawUnsafe("SELECT pg_advisory_xact_lock(730142)::text");
       const previous = await tx.omrUpload.findUnique({ where: { examId_createdBy_sha256: { examId, createdBy: user.userId, sha256 } } });
@@ -376,7 +441,7 @@ export class OmrService {
       const maxBytes = Number(process.env.OMR_MAX_STORAGE_BYTES ?? 2 * 1024 ** 3);
       if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || (total._sum.size ?? 0) + file.size > maxBytes)
         throw new ServiceUnavailableException("OMR saxlama limiti dolub.");
-      const created = await tx.omrUpload.create({ data: { examId, createdBy: user.userId, sha256, size: file.size, mime: file.mimetype } });
+      const created = await tx.omrUpload.create({ data: { examId, createdBy: user.userId, sha256, size: file.size, mime: file.mimetype, templateId: template?.id } });
       await this.audit.log("OMR_UPLOAD_CREATED", user.userId, "OmrUpload", created.id, { size: file.size, examId }, tx);
       return created;
     });
@@ -393,6 +458,11 @@ export class OmrService {
       await rename(temporary, join(dir, upload.id));
       const form = new FormData();
       form.append("files", new Blob([new Uint8Array(file.buffer)], { type: file.mimetype }), `scan${mimeExtensions[file.mimetype]}`);
+      if (template) {
+        form.append("sample", new Blob([new Uint8Array(template.sample)], { type: "image/png" }), "template.png");
+        form.append("layout", JSON.stringify(template.layout));
+        form.append("version", `custom:${template.id}`);
+      }
       const response = await this.worker("process", form);
       const parsed = workerResultSchema.parse(await response.json()).files[0];
       await this.prisma.$transaction(async tx => {
@@ -406,7 +476,7 @@ export class OmrService {
         for (const page of parsed.pages) {
           if (pageIndexes.has(page.pageIndex)) throw new Error("Duplicate page index");
           pageIndexes.add(page.pageIndex);
-          const bound = await this.bindPage(tx, page, examId, user);
+          const bound = await this.bindPage(tx, page, examId, user, template);
           if (bound.status !== "COMPLETED") review = true;
           await tx.omrPage.create({ data: { uploadId: upload.id, pageIndex: page.pageIndex, ...bound } });
         }
@@ -423,14 +493,36 @@ export class OmrService {
     return this.getUpload(upload.id, user, true);
   }
 
-  private async bindPage(tx: Prisma.TransactionClient, page: ReadPage, examId: string, user: AuthenticatedUser) {
+  private async bindPage(tx: Prisma.TransactionClient, page: ReadPage, examId: string, user: AuthenticatedUser, template?: OmrTemplate) {
     const { sheetToken, ...reading } = page;
     const review = (flag: string) => ({ sheetId: null, status: "REVIEW", data: json({ ...reading, score: null, reviewFlags: [...page.reviewFlags, flag] }) });
-    if (!sheetToken) return review("IDENTIFIER_REQUIRED");
-    const sheet = await tx.omrSheet.findUnique({ where: { token: sheetToken }, include: { answerKey: true, ticket: true, result: true } });
+    let token = sheetToken;
+    if (template) {
+      if (page.templateVersion !== `custom:${template.id}`) return review("TEMPLATE_KEY_MISMATCH");
+      if (!page.workNumber) return review("WORK_NUMBER_UNREADABLE");
+      await tx.$queryRaw`SELECT "id" FROM "tickets" WHERE "work_number" = ${page.workNumber} FOR UPDATE`;
+      const ticket = await tx.ticket.findUnique({ where: { workNumber: page.workNumber } });
+      if (!ticket || ticket.examId !== examId || !ticket.branchId || !this.branchAllowed(user, ticket.branchId))
+        return review("IDENTITY_NOT_AUTHORIZED_FOR_EXAM");
+      if (!ticket.candidateId || ticket.status === "CANCELLED" || (ticket.price > 0 && ticket.paymentStatus !== "PAID"))
+        return review("TICKET_IDENTITY_OR_STATUS_CHANGED");
+      const key = await tx.omrAnswerKey.findUniqueOrThrow({ where: { id: template.answerKeyId } });
+      if (key.examId !== examId) return review("TEMPLATE_KEY_MISMATCH");
+      try { scorePage(page, key.answers as KeyAnswer[], key.scoring as Rules, key.choiceCount); }
+      catch { return review("TEMPLATE_KEY_MISMATCH"); }
+      const existing = await tx.omrSheet.findUnique({ where: { ticketId: ticket.id } });
+      if (existing && (existing.templateVersion !== page.templateVersion || existing.answerKeyId !== key.id))
+        return review("TEMPLATE_KEY_MISMATCH");
+      const sheet = existing ?? await tx.omrSheet.create({ data: { token: randomBytes(32).toString("base64url"),
+        templateVersion: page.templateVersion, answerKeyId: key.id, ticketId: ticket.id,
+        candidateId: ticket.candidateId, examId, branchId: ticket.branchId } });
+      token = sheet.token;
+    }
+    if (!token) return review("IDENTIFIER_REQUIRED");
+    const sheet = await tx.omrSheet.findUnique({ where: { token }, include: { answerKey: true, ticket: true, result: true } });
     if (!sheet || sheet.examId !== examId || !this.branchAllowed(user, sheet.branchId)) return review("IDENTITY_NOT_AUTHORIZED_FOR_EXAM");
     if (page.templateVersion !== sheet.templateVersion) return review("TEMPLATE_KEY_MISMATCH");
-    if (page.templateVersion === "hilal-a4-v2" && (!page.workNumber || page.workNumber !== sheet.ticket.workNumber))
+    if (page.templateVersion !== "hilal-a4-v1" && (!page.workNumber || page.workNumber !== sheet.ticket.workNumber))
       return review(page.workNumber ? "WORK_NUMBER_MISMATCH" : "WORK_NUMBER_UNREADABLE");
     if (sheet.candidateId !== sheet.ticket.candidateId || sheet.examId !== sheet.ticket.examId || sheet.branchId !== sheet.ticket.branchId ||
         sheet.answerKey.examId !== examId || sheet.ticket.status === "CANCELLED" || (sheet.ticket.price > 0 && sheet.ticket.paymentStatus !== "PAID")) return review("TICKET_IDENTITY_OR_STATUS_CHANGED");

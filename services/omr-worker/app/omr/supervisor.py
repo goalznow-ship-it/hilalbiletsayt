@@ -22,6 +22,12 @@ def _child(connection, operation, args):
         if operation == "process":
             from .pipeline import process_batch
             result = process_batch(args)
+        elif operation == "template":
+            from .custom_template import prepare_template
+            result = prepare_template(*args)
+        elif operation == "custom":
+            from .custom_template import process_custom
+            result = process_custom(*args)
         elif operation == "report":
             from .results_pdf import generate_report
             result = generate_report(args)
